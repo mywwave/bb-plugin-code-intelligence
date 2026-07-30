@@ -80,8 +80,8 @@ claim: the pilot has three runs per task, one provider/model, and one public
 TypeScript repository. It does not claim to beat ripgrep.
 
 Release checks currently cover 163 automated tests. A fresh managed Git
-installation on BB `0.34.0` indexed this repository into `232` symbols and
-`2,303` edges with a reported completeness lower bound of `69.9%`; see the
+installation on BB `0.34.0` indexed this repository into `227` symbols and
+`2,296` edges with a reported completeness lower bound of `69.6%`; see the
 full [validation record](docs/VALIDATION.md) and [approach](docs/APPROACH.md).
 
 ## Limits and project status

@@ -29,9 +29,10 @@ the `bb code-intelligence` CLI command.
 The release gate also requires the bundled tree-sitter runtime plus the
 TypeScript, TSX, JavaScript, and Python grammars. On 2026-07-31, a second,
 fresh BB `0.34.0` instance installed the current Git `main` artifact and ran
-`bb code-intelligence index` against this repository: `232` symbols and
-`2,303` edges were indexed in `0.5 s`, with a reported graph-completeness
-lower bound of `69.9%`. This specifically verifies that managed Git installs
+`bb code-intelligence index` against this repository: `227` symbols and
+`2,296` edges were indexed in under one second, with a reported
+graph-completeness lower bound of `69.6%`. This specifically verifies that
+managed Git installs
 do not depend on the host having the parser package installed.
 
 ## Fresh-thread smoke test
