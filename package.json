@@ -1,0 +1,66 @@
+{
+  "name": "bb-plugin-code-intelligence",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Native code discovery and conservative static context for BB agents.",
+  "license": "MIT",
+  "homepage": "https://github.com/mywwave/bb-plugin-code-intelligence#readme",
+  "bugs": {
+    "url": "https://github.com/mywwave/bb-plugin-code-intelligence/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mywwave/bb-plugin-code-intelligence.git"
+  },
+  "files": [
+    "dist",
+    "server.ts",
+    "app.tsx",
+    "src",
+    "types",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "bb": ">=0.34",
+    "bbPluginSdk": "^0.4.1"
+  },
+  "bb": {
+    "name": "Code Intelligence",
+    "description": "Instant exact code search, structural retrieval, and conservative pre-change impact analysis.",
+    "branding": {
+      "icon": "Database"
+    },
+    "server": "./server.ts",
+    "app": "./app.tsx",
+    "skills": []
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.2.18",
+    "better-sqlite3": "^12.0.0",
+    "hono": "^4.11.9",
+    "typescript": "^5.7.0",
+    "vitest": "^3.2.7",
+    "zod": "^4.3.6"
+  },
+  "dependencies": {
+    "@vscode/tree-sitter-wasm": "^0.3.1",
+    "ignore": "^7.0.0",
+    "zod": "^4.3.6"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit --noUnusedLocals --noUnusedParameters",
+    "verify": "npm run typecheck && npm test",
+    "build:plugin": "NODE_PATH=./node_modules bb plugin build .",
+    "verify:release": "npm run verify && npm run build:plugin && node scripts/verify-release.js"
+  },
+  "keywords": [
+    "bb-plugin",
+    "code-search",
+    "static-analysis",
+    "agent-tools"
+  ]
+}

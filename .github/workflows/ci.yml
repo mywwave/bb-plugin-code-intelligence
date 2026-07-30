@@ -1,0 +1,23 @@
+name: Verify plugin
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.12.0
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: NODE_PATH="$PWD/node_modules" npx --yes bb-app@0.34.0 plugin build .
+      - run: node scripts/verify-release.js
