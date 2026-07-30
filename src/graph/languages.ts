@@ -7,7 +7,10 @@
  * because grammars carry the tree-sitter version they were compiled against.
  */
 
+import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
 export type LanguageId = "typescript" | "tsx" | "javascript" | "python";
 
@@ -55,6 +58,26 @@ export function languageForPath(path: string): LanguageId | null {
 let runtime: Promise<{ Parser: any; Language: any; dir: string }> | null = null;
 
 /**
+ * A managed Git plugin install runs the committed bundle without `npm install`.
+ * Keep the parser runtime beside that bundle so graph indexing is not coupled
+ * to the host application's dependency tree. Source and test runs fall back to
+ * the package dependency below.
+ */
+function bundledRuntimeDir(): string | null {
+  const runtimePath = fileURLToPath(new URL("./tree-sitter/tree-sitter.js", import.meta.url));
+  return existsSync(runtimePath) ? dirname(runtimePath) : null;
+}
+
+function runtimeDir(): string {
+  const bundled = bundledRuntimeDir();
+  if (bundled !== null) return bundled;
+  const require = createRequire(import.meta.url);
+  return require
+    .resolve("@vscode/tree-sitter-wasm/wasm/tree-sitter.js")
+    .replace(/[/\\]tree-sitter\.js$/, "");
+}
+
+/**
  * Bumped on every reset, and appended to the import specifier.
  *
  * Dropping the cached promise is not enough to recover from a WebAssembly
@@ -71,10 +94,7 @@ function loadRuntime() {
   if (runtime === null) {
     const generation = runtimeGeneration;
     runtime = (async () => {
-      const require = createRequire(import.meta.url);
-      const dir = require
-        .resolve("@vscode/tree-sitter-wasm/wasm/tree-sitter.js")
-        .replace(/[/\\]tree-sitter\.js$/, "");
+      const dir = runtimeDir();
       const specifier =
         generation === 0 ? `${dir}/tree-sitter.js` : `${dir}/tree-sitter.js?reload=${generation}`;
       const imported = await import(specifier);

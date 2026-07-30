@@ -54,7 +54,7 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit --noUnusedLocals --noUnusedParameters",
     "verify": "npm run typecheck && npm test",
-    "build:plugin": "NODE_PATH=./node_modules bb plugin build .",
+    "build:plugin": "NODE_PATH=./node_modules bb plugin build . && node scripts/copy-tree-sitter-assets.js",
     "verify:release": "npm run verify && npm run build:plugin && node scripts/verify-release.js"
   },
   "keywords": [

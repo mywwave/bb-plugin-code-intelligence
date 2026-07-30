@@ -15083,7 +15083,10 @@ import { readFile, readdir, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 
 // src/graph/languages.ts
+import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 var EXTENSION_TO_LANGUAGE = /* @__PURE__ */ new Map([
   [".ts", "typescript"],
   [".mts", "typescript"],
@@ -15102,13 +15105,22 @@ function languageForPath(path) {
   return EXTENSION_TO_LANGUAGE.get(path.slice(dot).toLowerCase()) ?? null;
 }
 var runtime = null;
+function bundledRuntimeDir() {
+  const runtimePath = fileURLToPath(new URL("./tree-sitter/tree-sitter.js", import.meta.url));
+  return existsSync(runtimePath) ? dirname(runtimePath) : null;
+}
+function runtimeDir() {
+  const bundled = bundledRuntimeDir();
+  if (bundled !== null) return bundled;
+  const require2 = createRequire(import.meta.url);
+  return require2.resolve("@vscode/tree-sitter-wasm/wasm/tree-sitter.js").replace(/[/\\]tree-sitter\.js$/, "");
+}
 var runtimeGeneration = 0;
 function loadRuntime() {
   if (runtime === null) {
     const generation = runtimeGeneration;
     runtime = (async () => {
-      const require2 = createRequire(import.meta.url);
-      const dir = require2.resolve("@vscode/tree-sitter-wasm/wasm/tree-sitter.js").replace(/[/\\]tree-sitter\.js$/, "");
+      const dir = runtimeDir();
       const specifier = generation === 0 ? `${dir}/tree-sitter.js` : `${dir}/tree-sitter.js?reload=${generation}`;
       const imported = await import(specifier);
       const api = imported.default ?? imported;
@@ -15682,7 +15694,7 @@ var SOURCE_EXTENSIONS = [
 ];
 function resolveModulePath(fromFile, specifier, knownFiles) {
   if (!specifier.startsWith(".")) return null;
-  const base = joinPath(dirname(fromFile), specifier);
+  const base = joinPath(dirname2(fromFile), specifier);
   const candidates = [
     base,
     // TypeScript source for a ".js" specifier — the standard ESM/NodeNext idiom.
@@ -15695,7 +15707,7 @@ function resolveModulePath(fromFile, specifier, knownFiles) {
   }
   return null;
 }
-function dirname(path) {
+function dirname2(path) {
   const index = path.lastIndexOf("/");
   return index < 0 ? "" : path.slice(0, index);
 }

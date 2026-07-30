@@ -29,6 +29,16 @@ export async function validateReleaseArtifacts(root = process.cwd()) {
   for (const artifact of ["server.js", "app.js", "app.css"]) {
     await requireFile(resolve(dist, artifact));
   }
+  for (const asset of [
+    "tree-sitter.js",
+    "tree-sitter.wasm",
+    "tree-sitter-typescript.wasm",
+    "tree-sitter-tsx.wasm",
+    "tree-sitter-javascript.wasm",
+    "tree-sitter-python.wasm",
+  ]) {
+    await requireFile(resolve(dist, "tree-sitter", asset));
+  }
 
   for (const metadataName of ["server.meta.json", "app.meta.json"]) {
     const metadata = await readJson(resolve(dist, metadataName));

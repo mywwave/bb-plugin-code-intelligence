@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import { validateReleaseArtifacts } from "../scripts/verify-release.js";
 
-async function fixture(options?: { pluginId?: string; version?: string }) {
+async function fixture(options?: { pluginId?: string; version?: string; treeSitterAssets?: boolean }) {
   const root = await mkdtemp(join(tmpdir(), "code-intelligence-release-"));
   await mkdir(join(root, "dist"));
   await writeFile(
@@ -15,6 +15,20 @@ async function fixture(options?: { pluginId?: string; version?: string }) {
   await writeFile(join(root, "dist", "server.js"), "export default {};\n");
   await writeFile(join(root, "dist", "app.js"), "export default {};\n");
   await writeFile(join(root, "dist", "app.css"), "");
+  if (options?.treeSitterAssets !== false) {
+    const assets = join(root, "dist", "tree-sitter");
+    await mkdir(assets);
+    for (const name of [
+      "tree-sitter.js",
+      "tree-sitter.wasm",
+      "tree-sitter-typescript.wasm",
+      "tree-sitter-tsx.wasm",
+      "tree-sitter-javascript.wasm",
+      "tree-sitter-python.wasm",
+    ]) {
+      await writeFile(join(assets, name), "asset");
+    }
+  }
   const metadata = {
     pluginId: options?.pluginId ?? "code-intelligence",
     pluginVersion: options?.version ?? "0.1.0",
@@ -33,5 +47,11 @@ describe("validateReleaseArtifacts", () => {
     await expect(
       validateReleaseArtifacts(await fixture({ pluginId: "codegraph" })),
     ).rejects.toThrow('expected pluginId "code-intelligence"');
+  });
+
+  it("rejects a build that omits the parser runtime assets", async () => {
+    await expect(
+      validateReleaseArtifacts(await fixture({ treeSitterAssets: false })),
+    ).rejects.toThrow("missing release artifact");
   });
 });
