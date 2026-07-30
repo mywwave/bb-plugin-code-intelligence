@@ -24,6 +24,15 @@ bb plugin list
 on the BB host: the Git artifact includes its server bundle, frontend bundle,
 and parser runtime.
 
+### Install from the BB interface
+
+Open **Plugins** → **Add plugin**, then paste this exact value into the
+installation field and select **Install plugin**:
+
+```text
+git:https://github.com/mywwave/bb-plugin-code-intelligence.git@main
+```
+
 To verify graph indexing explicitly in a local checkout:
 
 ```bash
