@@ -38,7 +38,7 @@ path structured, host-aware, and measurable.
 The following checks are reproducible in this repository and documented in
 [VALIDATION.md](VALIDATION.md):
 
-- 164 automated tests across exact search, retrieval, indexing, project-path
+- 165 automated tests across exact search, retrieval, indexing, project-path
   routing, persistence, impact analysis, presentation, and release metadata;
 - strict TypeScript checking and a repeatable release gate;
 - a clean isolated BB `0.34.0` path install with a running plugin, compatible
