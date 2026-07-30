@@ -18,6 +18,15 @@ Installing this repository by local path produced:
 `bb code-intelligence status` returned an empty index/feedback summary without
 an error before the first repository use.
 
+## Managed Git install
+
+The committed `main` branch was installed into the same isolated BB instance
+using `git:https://github.com/mywwave/bb-plugin-code-intelligence.git@main`.
+BB loaded the committed prebuilt server artifact without local plugin
+dependencies. The installed plugin reported `running`, no status detail, a
+compatible SDK `0.4.1` frontend bundle, and the `bb code-intelligence` CLI
+command.
+
 ## Fresh-thread smoke test
 
 A separate, read-only Codex thread was started against this repository in the

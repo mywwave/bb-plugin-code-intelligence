@@ -57,4 +57,5 @@ tools.
 
 This is an independent prototype, not an official BB plugin. It is intended
 for local evaluation and maintainer discussion. See [the maintainer proposal](docs/MAINTAINER_PROPOSAL.md)
-for the future official-plugin integration boundary.
+for the future official-plugin integration boundary and [the approach and
+evidence](docs/APPROACH.md) for the design rationale.

@@ -9,6 +9,9 @@ queries, workspace/host-aware routing, bounded exploration, and explicit
 static-analysis limits. It does not intercept shell commands and it does not
 claim to be faster than ripgrep.
 
+The retrieval ladder, hypotheses, confirmed validation, and benchmark boundary
+are documented in [APPROACH.md](APPROACH.md).
+
 If BB maintainers choose to adopt it later, the expected integration is an
 opt-in official plugin under `official-plugins/code-intelligence`. The future
 upstream change would use the BB workspace SDK/test harness, register a
