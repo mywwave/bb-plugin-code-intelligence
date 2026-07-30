@@ -47,6 +47,8 @@ The following checks are reproducible in this repository and documented in
   host-file snapshot, consumed its exact result, and made no edits;
 - a managed `git:` install from this repository's GitHub `main` branch, using
   the committed prebuilt release artifacts without local plugin dependencies.
+- a controlled six-run-per-arm agent-routing pilot whose raw counts and limits
+  are published in [the A/B results](../bench/results/2026-07-31-agent-routing-smoke-v1.md).
 
 ## What has not been claimed
 

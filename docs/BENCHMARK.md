@@ -43,3 +43,9 @@ Publish raw machine-readable data, the runner command, and a short narrative
 of failures. Separate local-server-root and remote-host-snapshot results. Do
 not merge them into a single speed number because they have different I/O
 paths.
+
+## Published pilot
+
+The first small agent-routing pilot is published under
+[`bench/results/`](../bench/results/). It is evidence of observed routing for
+its two tasks, not a statistically general performance claim.

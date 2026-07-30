@@ -1,0 +1,29 @@
+{
+  "suite": "code-intelligence-agent-routing-smoke-v1",
+  "date": "2026-07-31",
+  "repositoryCommit": "da3f83f",
+  "bbVersion": "0.34.0",
+  "provider": "codex",
+  "model": "gpt-5.5",
+  "permissionMode": "full",
+  "mode": "read-only",
+  "runsPerTaskPerArm": 3,
+  "arms": {
+    "baseline": "Fresh isolated BB instance with Code Intelligence absent.",
+    "enabled": "Fresh isolated BB instance with Code Intelligence installed from managed git source at main."
+  },
+  "runs": [
+    { "arm": "baseline", "task": "known-symbol", "iteration": 1, "correct": true, "durationMs": 19603, "nativeToolCalls": [], "shellSearches": 1, "operations": 4 },
+    { "arm": "baseline", "task": "known-symbol", "iteration": 2, "correct": true, "durationMs": 14854, "nativeToolCalls": [], "shellSearches": 1, "operations": 4 },
+    { "arm": "baseline", "task": "known-symbol", "iteration": 3, "correct": true, "durationMs": 11508, "nativeToolCalls": [], "shellSearches": 1, "operations": 2 },
+    { "arm": "enabled", "task": "known-symbol", "iteration": 1, "correct": true, "durationMs": 17685, "nativeToolCalls": ["instant_grep"], "shellSearches": 0, "operations": 3 },
+    { "arm": "enabled", "task": "known-symbol", "iteration": 2, "correct": true, "durationMs": 12888, "nativeToolCalls": ["instant_grep"], "shellSearches": 0, "operations": 3 },
+    { "arm": "enabled", "task": "known-symbol", "iteration": 3, "correct": true, "durationMs": 12571, "nativeToolCalls": ["instant_grep"], "shellSearches": 0, "operations": 2 },
+    { "arm": "baseline", "task": "exploratory-routing", "iteration": 1, "correct": true, "durationMs": 35163, "nativeToolCalls": [], "shellSearches": 6, "operations": 13 },
+    { "arm": "baseline", "task": "exploratory-routing", "iteration": 2, "correct": true, "durationMs": 29550, "nativeToolCalls": [], "shellSearches": 7, "operations": 12 },
+    { "arm": "baseline", "task": "exploratory-routing", "iteration": 3, "correct": true, "durationMs": 39270, "nativeToolCalls": [], "shellSearches": 8, "operations": 20 },
+    { "arm": "enabled", "task": "exploratory-routing", "iteration": 1, "correct": true, "durationMs": 33114, "nativeToolCalls": ["instant_grep", "instant_grep", "instant_grep", "instant_grep", "instant_grep", "instant_grep"], "shellSearches": 2, "operations": 13 },
+    { "arm": "enabled", "task": "exploratory-routing", "iteration": 2, "correct": true, "durationMs": 30954, "nativeToolCalls": ["instant_grep", "instant_grep"], "shellSearches": 2, "operations": 11 },
+    { "arm": "enabled", "task": "exploratory-routing", "iteration": 3, "correct": true, "durationMs": 30791, "nativeToolCalls": ["instant_grep", "instant_grep", "instant_grep"], "shellSearches": 1, "operations": 11 }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "suite": "code-intelligence-agent-routing-smoke-v1",
+  "repository": "https://github.com/mywwave/bb-plugin-code-intelligence",
+  "commit": "da3f83f",
+  "provider": "codex",
+  "mode": "read-only",
+  "tasks": [
+    {
+      "id": "known-symbol",
+      "prompt": "Read-only: Which file defines validateReleaseArtifacts, and what does it validate? Give the file path and one concise sentence. Do not edit files.",
+      "expectedFiles": [
+        "scripts/verify-release.js"
+      ],
+      "requiredAnswerTerms": [
+        "package",
+        "dist"
+      ]
+    },
+    {
+      "id": "exploratory-routing",
+      "prompt": "Read-only: Where does this plugin choose between BB host-file snapshots and local ripgrep for exact search? Name the implementation file and summarize the routing rule. Do not edit files.",
+      "expectedFiles": [
+        "server.ts"
+      ],
+      "requiredAnswerTerms": [
+        "host-file",
+        "ripgrep"
+      ]
+    }
+  ],
+  "metrics": {
+    "correct": "Answer names an expected file and contains all required answer terms, case-insensitively.",
+    "nativeToolCalls": "Count completed Code Intelligence tool calls in the thread event stream.",
+    "shellSearches": "Count command-execution events containing rg, grep, find, fd, ag, or ack.",
+    "toolCalls": "Count all completed tool calls and command executions.",
+    "durationMs": "Elapsed time from client/turn/requested to the final completed agent message."
+  },
+  "comparability": "Every run uses the same pinned repository commit, provider, model, permission mode, prompts, and isolated BB version. The only intended variable is whether Code Intelligence is installed."
+}
