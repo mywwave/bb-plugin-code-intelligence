@@ -15,7 +15,6 @@
   "files": [
     "dist",
     "server.ts",
-    "app.tsx",
     "src",
     "types",
     "README.md",
@@ -32,7 +31,6 @@
       "icon": "Database"
     },
     "server": "./server.ts",
-    "app": "./app.tsx",
     "skills": []
   },
   "devDependencies": {

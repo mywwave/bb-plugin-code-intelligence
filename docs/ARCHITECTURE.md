@@ -2,8 +2,7 @@
 
 Code Intelligence is a BB server plugin. It registers native agent tools for
 exact discovery, bounded exploration, structural context, and conservative
-change checks. It has no required panel or settings screen; the optional
-frontend script only rewrites this plugin's timeline labels for readability.
+change checks. It has no frontend bundle, panel, or settings screen.
 
 ## Workspace and host routing
 

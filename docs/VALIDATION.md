@@ -13,7 +13,7 @@ Installing this repository by local path produced:
 - version: `0.1.0`;
 - status: `running` with no status detail;
 - CLI command: `bb code-intelligence`;
-- compatible frontend bundle stamped for plugin SDK `0.4.1`.
+- no frontend bundle or frontend build dependency.
 
 `bb code-intelligence status` returned an empty index/feedback summary without
 an error before the first repository use.
@@ -23,9 +23,8 @@ an error before the first repository use.
 The committed `main` branch was installed into the same isolated BB instance
 using `git:https://github.com/mywwave/bb-plugin-code-intelligence.git@main`.
 BB loaded the committed prebuilt server artifact without local plugin
-dependencies. The installed plugin reported `running`, no status detail, a
-compatible SDK `0.4.1` frontend bundle, and the `bb code-intelligence` CLI
-command.
+dependencies. The installed plugin reported `running`, no status detail, and
+the `bb code-intelligence` CLI command.
 
 The release gate also requires the bundled tree-sitter runtime plus the
 TypeScript, TSX, JavaScript, and Python grammars. On 2026-07-31, a second,

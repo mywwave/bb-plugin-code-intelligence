@@ -23,7 +23,6 @@
     "skipLibCheck": false
   },
   "include": [
-    "app.tsx",
     "server.ts",
     "src",
     "test",

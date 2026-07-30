@@ -31,18 +31,17 @@ path structured, host-aware, and measurable.
 | A local server path can refer to the wrong checkout on multi-host BB. | Treat the active thread environment as authoritative and use BB host-file APIs for remote workspaces. | Prevents silent cross-workspace reads. |
 | Static analysis is useful but incomplete. | Report graph completeness and dynamic boundaries with structural results. | A missing edge is not presented as proof of no runtime dependency. |
 | Agent tool use should be observed, not assumed. | Record per-surface feedback and follow-up search outcomes. | Lets maintainers measure whether routing reduces unnecessary discovery work. |
-| Native tool labels should remain readable in a live thread. | Keep an optional, scoped timeline presentation script. | Improves observability without altering tool arguments or results. |
 
 ## Confirmed evidence
 
 The following checks are reproducible in this repository and documented in
 [VALIDATION.md](VALIDATION.md):
 
-- 165 automated tests across exact search, retrieval, indexing, project-path
-  routing, persistence, impact analysis, presentation, and release metadata;
+- 163 automated tests across exact search, retrieval, indexing, project-path
+  routing, persistence, impact analysis, and release metadata;
 - strict TypeScript checking and a repeatable release gate;
-- a clean isolated BB `0.34.0` path install with a running plugin, compatible
-  frontend bundle, and `bb code-intelligence` command;
+- a clean isolated BB `0.34.0` path install with a running plugin and
+  `bb code-intelligence` command;
 - a fresh read-only Codex thread that invoked `instant_grep` through the BB
   host-file snapshot, consumed its exact result, and made no edits;
 - a managed `git:` install from this repository's GitHub `main` branch, using

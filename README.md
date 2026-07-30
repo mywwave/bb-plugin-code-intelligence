@@ -21,8 +21,7 @@ bb plugin list
 ```
 
 `code-intelligence@0.1.0` should show as `running`. No `npm install` is needed
-on the BB host: the Git artifact includes its server bundle, frontend bundle,
-and parser runtime.
+on the BB host: the Git artifact includes its server bundle and parser runtime.
 
 ### Install from the BB interface
 
@@ -80,7 +79,7 @@ correctness in those tasks. It is **not** a general latency, cost, or quality
 claim: the pilot has three runs per task, one provider/model, and one public
 TypeScript repository. It does not claim to beat ripgrep.
 
-Release checks currently cover 165 automated tests. A fresh managed Git
+Release checks currently cover 163 automated tests. A fresh managed Git
 installation on BB `0.34.0` indexed this repository into `232` symbols and
 `2,303` edges with a reported completeness lower bound of `69.9%`; see the
 full [validation record](docs/VALIDATION.md) and [approach](docs/APPROACH.md).
@@ -102,5 +101,5 @@ npm ci
 npm run verify:release
 ```
 
-`dist/` is the managed-install artifact. `app.tsx` is limited to the optional
-timeline-label presentation script; it does not add a panel or settings UI.
+`dist/` is the managed-install artifact. The plugin intentionally has no
+frontend bundle, panel, or settings UI.

@@ -26,7 +26,7 @@ export async function validateReleaseArtifacts(root = process.cwd()) {
   }
 
   const dist = resolve(root, "dist");
-  for (const artifact of ["server.js", "app.js", "app.css"]) {
+  for (const artifact of ["server.js"]) {
     await requireFile(resolve(dist, artifact));
   }
   for (const asset of [
@@ -40,7 +40,7 @@ export async function validateReleaseArtifacts(root = process.cwd()) {
     await requireFile(resolve(dist, "tree-sitter", asset));
   }
 
-  for (const metadataName of ["server.meta.json", "app.meta.json"]) {
+  for (const metadataName of ["server.meta.json"]) {
     const metadata = await readJson(resolve(dist, metadataName));
     if (metadata.pluginId !== PLUGIN_ID) {
       throw new Error(

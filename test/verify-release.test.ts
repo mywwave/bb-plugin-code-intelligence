@@ -5,7 +5,12 @@ import { describe, expect, it } from "vitest";
 
 import { validateReleaseArtifacts } from "../scripts/verify-release.js";
 
-async function fixture(options?: { pluginId?: string; version?: string; treeSitterAssets?: boolean }) {
+async function fixture(options?: {
+  pluginId?: string;
+  version?: string;
+  treeSitterAssets?: boolean;
+  app?: boolean;
+}) {
   const root = await mkdtemp(join(tmpdir(), "code-intelligence-release-"));
   await mkdir(join(root, "dist"));
   await writeFile(
@@ -13,8 +18,10 @@ async function fixture(options?: { pluginId?: string; version?: string; treeSitt
     JSON.stringify({ name: "bb-plugin-code-intelligence", version: "0.1.0" }),
   );
   await writeFile(join(root, "dist", "server.js"), "export default {};\n");
-  await writeFile(join(root, "dist", "app.js"), "export default {};\n");
-  await writeFile(join(root, "dist", "app.css"), "");
+  if (options?.app !== false) {
+    await writeFile(join(root, "dist", "app.js"), "export default {};\n");
+    await writeFile(join(root, "dist", "app.css"), "");
+  }
   if (options?.treeSitterAssets !== false) {
     const assets = join(root, "dist", "tree-sitter");
     await mkdir(assets);
@@ -34,13 +41,19 @@ async function fixture(options?: { pluginId?: string; version?: string; treeSitt
     pluginVersion: options?.version ?? "0.1.0",
   };
   await writeFile(join(root, "dist", "server.meta.json"), JSON.stringify(metadata));
-  await writeFile(join(root, "dist", "app.meta.json"), JSON.stringify(metadata));
+  if (options?.app !== false) {
+    await writeFile(join(root, "dist", "app.meta.json"), JSON.stringify(metadata));
+  }
   return root;
 }
 
 describe("validateReleaseArtifacts", () => {
   it("accepts matching Code Intelligence build metadata", async () => {
     await expect(validateReleaseArtifacts(await fixture())).resolves.toBeUndefined();
+  });
+
+  it("accepts a server-only release without frontend artifacts", async () => {
+    await expect(validateReleaseArtifacts(await fixture({ app: false }))).resolves.toBeUndefined();
   });
 
   it("rejects an artifact for another plugin id", async () => {
