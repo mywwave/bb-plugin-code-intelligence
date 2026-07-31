@@ -39,12 +39,7 @@ const INSTRUCTION_STYLES: readonly InstructionStyle[] = ["playbook", "budget", "
 const TOOL_SURFACES: readonly ToolSurface[] = ["lean", "full"];
 
 /** Default lean set: discovery one-shot plus edit gate/verify. */
-export const LEAN_AGENT_TOOLS = [
-  "codebase_query",
-  "instant_grep",
-  "prechange_impact",
-  "verify_change",
-] as const;
+export const LEAN_AGENT_TOOLS = ["codebase_query", "instant_grep", "prechange_impact", "verify_change"] as const;
 
 /** Full set: lean tools plus structural/orientation extras. */
 export const FULL_AGENT_TOOLS = [
@@ -80,24 +75,14 @@ const LIMITS = {
 } as const;
 
 function objectValue(value: unknown): Record<string, unknown> {
-  return typeof value === "object" && value !== null
-    ? (value as Record<string, unknown>)
-    : {};
+  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
 }
 
-function booleanValue(
-  value: unknown,
-  fallback: boolean,
-): boolean {
+function booleanValue(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
 }
 
-function integerValue(
-  value: unknown,
-  fallback: number,
-  minimum: number,
-  maximum: number,
-): number {
+function integerValue(value: unknown, fallback: number, minimum: number, maximum: number): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
   return Math.min(maximum, Math.max(minimum, Math.round(value)));
 }
@@ -106,39 +91,21 @@ export function normalizeCodeGraphConfig(value: unknown): CodeGraphConfig {
   const source = objectValue(value);
   return {
     autoIndex: booleanValue(source.autoIndex, DEFAULT_CODE_GRAPH_CONFIG.autoIndex),
-    respectGitignore: booleanValue(
-      source.respectGitignore,
-      DEFAULT_CODE_GRAPH_CONFIG.respectGitignore,
-    ),
+    respectGitignore: booleanValue(source.respectGitignore, DEFAULT_CODE_GRAPH_CONFIG.respectGitignore),
     includeHiddenDirectories: booleanValue(
       source.includeHiddenDirectories,
       DEFAULT_CODE_GRAPH_CONFIG.includeHiddenDirectories,
     ),
-    backgroundRefresh: booleanValue(
-      source.backgroundRefresh,
-      DEFAULT_CODE_GRAPH_CONFIG.backgroundRefresh,
-    ),
+    backgroundRefresh: booleanValue(source.backgroundRefresh, DEFAULT_CODE_GRAPH_CONFIG.backgroundRefresh),
     refreshIntervalSeconds: integerValue(
       source.refreshIntervalSeconds,
       DEFAULT_CODE_GRAPH_CONFIG.refreshIntervalSeconds,
       ...LIMITS.refreshIntervalSeconds,
     ),
-    warmLimit: integerValue(
-      source.warmLimit,
-      DEFAULT_CODE_GRAPH_CONFIG.warmLimit,
-      ...LIMITS.warmLimit,
-    ),
-    includeSnippets: booleanValue(
-      source.includeSnippets,
-      DEFAULT_CODE_GRAPH_CONFIG.includeSnippets,
-    ),
-    useCochange: booleanValue(
-      source.useCochange,
-      DEFAULT_CODE_GRAPH_CONFIG.useCochange,
-    ),
-    instructionStyle: INSTRUCTION_STYLES.includes(
-      source.instructionStyle as InstructionStyle,
-    )
+    warmLimit: integerValue(source.warmLimit, DEFAULT_CODE_GRAPH_CONFIG.warmLimit, ...LIMITS.warmLimit),
+    includeSnippets: booleanValue(source.includeSnippets, DEFAULT_CODE_GRAPH_CONFIG.includeSnippets),
+    useCochange: booleanValue(source.useCochange, DEFAULT_CODE_GRAPH_CONFIG.useCochange),
+    instructionStyle: INSTRUCTION_STYLES.includes(source.instructionStyle as InstructionStyle)
       ? (source.instructionStyle as InstructionStyle)
       : DEFAULT_CODE_GRAPH_CONFIG.instructionStyle,
     toolSurface: TOOL_SURFACES.includes(source.toolSurface as ToolSurface)
@@ -156,9 +123,6 @@ export function agentToolsForSurface(surface: ToolSurface): readonly string[] {
   return surface === "full" ? FULL_AGENT_TOOLS : LEAN_AGENT_TOOLS;
 }
 
-export function mergeCodeGraphConfig(
-  current: CodeGraphConfig,
-  patch: CodeGraphConfigPatch,
-): CodeGraphConfig {
+export function mergeCodeGraphConfig(current: CodeGraphConfig, patch: CodeGraphConfigPatch): CodeGraphConfig {
   return normalizeCodeGraphConfig({ ...current, ...patch });
 }

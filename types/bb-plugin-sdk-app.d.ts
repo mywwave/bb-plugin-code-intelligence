@@ -12,7 +12,5 @@ declare module "@bb/plugin-sdk/app" {
     };
   }
 
-  export function definePluginApp(
-    setup: (app: PluginAppBuilder) => void,
-  ): unknown;
+  export function definePluginApp(setup: (app: PluginAppBuilder) => void): unknown;
 }

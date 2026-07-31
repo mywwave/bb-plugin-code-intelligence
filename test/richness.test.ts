@@ -87,12 +87,7 @@ describe("chao1", () => {
       for (let i = 0; i < 300; i++) {
         const population = 200 + Math.floor(random() * 800);
         const sources = [0.3 + random() * 0.4, 0.25 + random() * 0.4, 0.2 + random() * 0.3];
-        const { observed, singletons, doubletons } = simulate(
-          random,
-          population,
-          sources,
-          heterogeneity,
-        );
+        const { observed, singletons, doubletons } = simulate(random, population, sources, heterogeneity);
         if (observed === 0) continue;
 
         trials++;
@@ -124,9 +119,7 @@ describe("chao1", () => {
     const withoutKnown = chao1(21090, 8346, 12744);
     const withKnown = chao1(21090, 8346, 12744, 10374);
 
-    expect(withKnown.completenessLowerBound).toBeLessThan(
-      withoutKnown.completenessLowerBound,
-    );
+    expect(withKnown.completenessLowerBound).toBeLessThan(withoutKnown.completenessLowerBound);
     expect(withKnown.estimated).toBe(withoutKnown.estimated + 10374);
     // Ignoring them would have claimed ~88% completeness instead of ~61%.
     expect(withoutKnown.completenessLowerBound).toBeGreaterThan(0.85);

@@ -56,15 +56,15 @@ export function remoteInventoryBlindSpots(inventory: RemoteInventory | undefined
   if (inventory.truncated) {
     limits.push(
       `The remote host listing was truncated after ${inventory.enumerated} paths; ` +
-      "unenumerated paths are unknown, so an absent match, symbol, or caller is inconclusive.",
+        "unenumerated paths are unknown, so an absent match, symbol, or caller is inconclusive.",
     );
   }
   const excludedContent = inventory.skipped.tooLarge + inventory.skipped.nonUtf8;
   if (excludedContent > 0) {
     limits.push(
       `The remote snapshot excluded ${excludedContent} readable files ` +
-      `(tooLarge=${inventory.skipped.tooLarge}, nonUtf8=${inventory.skipped.nonUtf8}); ` +
-      "an absent match, symbol, or caller may be in excluded content.",
+        `(tooLarge=${inventory.skipped.tooLarge}, nonUtf8=${inventory.skipped.nonUtf8}); ` +
+        "an absent match, symbol, or caller may be in excluded content.",
     );
   }
   return limits;
@@ -75,9 +75,7 @@ export function remoteInventoryBlindSpots(inventory: RemoteInventory | undefined
  * that cannot enter the searchable snapshot. A truncated host listing is not
  * treated as a complete repository inventory.
  */
-export async function collectRemoteSources(
-  options: CollectRemoteSourcesOptions,
-): Promise<RemoteSourceCollection> {
+export async function collectRemoteSources(options: CollectRemoteSourcesOptions): Promise<RemoteSourceCollection> {
   const paths = [...options.paths].sort((left, right) => left.localeCompare(right));
   const skipped = { ignored: 0, excluded: 0, tooLarge: 0, nonUtf8: 0 };
   const sources = new Map<string, string>();

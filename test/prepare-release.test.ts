@@ -18,7 +18,11 @@ async function releaseFixture() {
   await writeFile(join(root, "package.json"), JSON.stringify({ name: "fixture", version: "0.1.0" }, null, 2));
   await writeFile(
     join(root, "package-lock.json"),
-    JSON.stringify({ name: "fixture", version: "0.1.0", lockfileVersion: 3, packages: { "": { version: "0.1.0" } } }, null, 2),
+    JSON.stringify(
+      { name: "fixture", version: "0.1.0", lockfileVersion: 3, packages: { "": { version: "0.1.0" } } },
+      null,
+      2,
+    ),
   );
   await writeFile(
     join(root, "CHANGELOG.md"),
@@ -49,8 +53,6 @@ describe("prepareRelease", () => {
 
     await expect(prepareRelease("v1.2.3", root, { build: async () => {} })).rejects.toThrow("SemVer");
     await writeFile(join(root, "scratch.txt"), "dirty\n");
-    await expect(prepareRelease("1.2.3", root, { build: async () => {} })).rejects.toThrow(
-      "clean working tree",
-    );
+    await expect(prepareRelease("1.2.3", root, { build: async () => {} })).rejects.toThrow("clean working tree");
   });
 });

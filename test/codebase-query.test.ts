@@ -13,10 +13,12 @@ const roots: string[] = [];
 async function fixture(files: Readonly<Record<string, string>>): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "codebase-query-"));
   roots.push(root);
-  await Promise.all(Object.entries(files).map(async ([file, content]) => {
-    await mkdir(join(root, file, ".."), { recursive: true });
-    await writeFile(join(root, file), content, "utf8");
-  }));
+  await Promise.all(
+    Object.entries(files).map(async ([file, content]) => {
+      await mkdir(join(root, file, ".."), { recursive: true });
+      await writeFile(join(root, file), content, "utf8");
+    }),
+  );
   return root;
 }
 
@@ -38,29 +40,35 @@ describe("codebase query", () => {
   });
 
   it("keeps a dotted command name whole instead of spending the search budget on generic prose", () => {
-    expect(buildCodebaseQueryPatterns("Which handler executes environment.provision for a thread environment?")).toEqual([
-      "environment.provision",
-      "environment",
-      "handler",
-    ]);
+    expect(
+      buildCodebaseQueryPatterns("Which handler executes environment.provision for a thread environment?"),
+    ).toEqual(["environment.provision", "environment", "handler"]);
   });
 
   it("reduces a qualified method signature to its callable identifier for a direct trace", async () => {
     const root = await fixture({
-      "a/example.java": Array.from({ length: 9 }, () => "new Gson().fromJson(\"{}\", String.class);").join("\n"),
+      "a/example.java": Array.from({ length: 9 }, () => 'new Gson().fromJson("{}", String.class);').join("\n"),
       "src/gson.java": "class Gson { void fromJson(String json, Class type) { delegate(); } }\n",
     });
     const fromJson = symbol("src/gson.java#fromJson", "fromJson", "src/gson.java", "fromJson delegates");
     const delegate = symbol("src/gson.java#delegate", "delegate", "src/gson.java", "delegate parses");
-    const bodies = new Map([[fromJson.id, fromJson.body], [delegate.id, delegate.body]]);
-    const index = buildIndex({
-      symbols: [fromJson, delegate],
-      edges: [
-        { from: fromJson.id, to: delegate.id, weight: 1, strategy: "uniqueName" },
-        { from: fromJson.id, to: delegate.id, weight: 1, strategy: "uniqueName" },
-      ],
-      ambiguousCalls: 0,
-    } satisfies IndexInput, (entry) => bodies.get(entry.id) ?? "", 0.8, true);
+    const bodies = new Map([
+      [fromJson.id, fromJson.body],
+      [delegate.id, delegate.body],
+    ]);
+    const index = buildIndex(
+      {
+        symbols: [fromJson, delegate],
+        edges: [
+          { from: fromJson.id, to: delegate.id, weight: 1, strategy: "uniqueName" },
+          { from: fromJson.id, to: delegate.id, weight: 1, strategy: "uniqueName" },
+        ],
+        ambiguousCalls: 0,
+      } satisfies IndexInput,
+      (entry) => bodies.get(entry.id) ?? "",
+      0.8,
+      true,
+    );
 
     const result = await queryCodebase(root, index, {
       query: "Trace `Gson.fromJson(String, Class)` and its direct delegation.",
@@ -84,17 +92,38 @@ describe("codebase query", () => {
       "src/error.rs": "impl Error { pub fn new<E>(error: E) -> Self { Self::construct_from_std(error) } }\n",
       "src/ensure.rs": "impl Buf { pub fn new() -> Self { Self } }\n",
     });
-    const chainNew = { ...symbol("src/chain.rs#Chain.new", "new", "src/chain.rs", "unrelated"), kind: "method" as const, container: "Chain" };
-    const errorNew = { ...symbol("src/error.rs#Error.new", "new", "src/error.rs", "construct_from_std"), kind: "method" as const, container: "Error" };
-    const construct = { ...symbol("src/error.rs#Error.construct_from_std", "construct_from_std", "src/error.rs", "construct"), kind: "method" as const, container: "Error" };
-    const bufNew = { ...symbol("src/ensure.rs#Buf.new", "new", "src/ensure.rs", "unrelated"), kind: "method" as const, container: "Buf" };
+    const chainNew = {
+      ...symbol("src/chain.rs#Chain.new", "new", "src/chain.rs", "unrelated"),
+      kind: "method" as const,
+      container: "Chain",
+    };
+    const errorNew = {
+      ...symbol("src/error.rs#Error.new", "new", "src/error.rs", "construct_from_std"),
+      kind: "method" as const,
+      container: "Error",
+    };
+    const construct = {
+      ...symbol("src/error.rs#Error.construct_from_std", "construct_from_std", "src/error.rs", "construct"),
+      kind: "method" as const,
+      container: "Error",
+    };
+    const bufNew = {
+      ...symbol("src/ensure.rs#Buf.new", "new", "src/ensure.rs", "unrelated"),
+      kind: "method" as const,
+      container: "Buf",
+    };
     const symbols = [chainNew, errorNew, construct, bufNew];
     const bodies = new Map(symbols.map((entry) => [entry.id, entry.body]));
-    const index = buildIndex({
-      symbols,
-      edges: [{ from: errorNew.id, to: construct.id, weight: 1, strategy: "uniqueName" }],
-      ambiguousCalls: 0,
-    } satisfies IndexInput, (entry) => bodies.get(entry.id) ?? "", 0.8, true);
+    const index = buildIndex(
+      {
+        symbols,
+        edges: [{ from: errorNew.id, to: construct.id, weight: 1, strategy: "uniqueName" }],
+        ambiguousCalls: 0,
+      } satisfies IndexInput,
+      (entry) => bodies.get(entry.id) ?? "",
+      0.8,
+      true,
+    );
 
     const result = await queryCodebase(root, index, {
       query: "Trace `anyhow::Error::new` and its direct delegation.",
@@ -117,19 +146,42 @@ describe("codebase query", () => {
       "src/io/error.rs": "impl Error { pub fn new() -> Self { Self } }\n",
       "src/net/error.rs": "impl Error { pub fn new() -> Self { Self } }\n",
     });
-    const ioNew = { ...symbol("src/io/error.rs#Error.new", "new", "src/io/error.rs", "io"), kind: "method" as const, container: "Error" };
-    const netNew = { ...symbol("src/net/error.rs#Error.new", "new", "src/net/error.rs", "net"), kind: "method" as const, container: "Error" };
-    const index = buildIndex({ symbols: [ioNew, netNew], edges: [], ambiguousCalls: 0 } satisfies IndexInput, () => "", 0.8, true);
+    const ioNew = {
+      ...symbol("src/io/error.rs#Error.new", "new", "src/io/error.rs", "io"),
+      kind: "method" as const,
+      container: "Error",
+    };
+    const netNew = {
+      ...symbol("src/net/error.rs#Error.new", "new", "src/net/error.rs", "net"),
+      kind: "method" as const,
+      container: "Error",
+    };
+    const index = buildIndex(
+      { symbols: [ioNew, netNew], edges: [], ambiguousCalls: 0 } satisfies IndexInput,
+      () => "",
+      0.8,
+      true,
+    );
 
     const result = await queryCodebase(root, index, {
       query: "Trace `net::Error::new`.",
       mode: "trace",
       budgetTokens: 160,
-      search: async () => [{
-        pattern: "new",
-        matches: [{ file: "./src/net/error.rs", line: 1, text: "impl Error { pub fn new() -> Self { Self } }", before: [], after: [] }],
-        truncated: false,
-      }],
+      search: async () => [
+        {
+          pattern: "new",
+          matches: [
+            {
+              file: "./src/net/error.rs",
+              line: 1,
+              text: "impl Error { pub fn new() -> Self { Self } }",
+              before: [],
+              after: [],
+            },
+          ],
+          truncated: false,
+        },
+      ],
     });
 
     expect(result.trace?.symbols).toEqual([expect.objectContaining({ id: netNew.id })]);
@@ -142,12 +194,29 @@ describe("codebase query", () => {
       "src/payment/handler.ts": "export function handlePaymentFailure() { throw new PaymentFailedError(); }\n",
     });
     const symbols = [
-      symbol("src/payment/error.ts#PaymentFailedError", "PaymentFailedError", "src/payment/error.ts", "payment failure error"),
-      symbol("src/payment/handler.ts#handlePaymentFailure", "handlePaymentFailure", "src/payment/handler.ts", "handle payment failure"),
-      ...Array.from({ length: 20 }, (_, i) => symbol(`src/filler/${i}.ts#noop${i}`, `noop${i}`, `src/filler/${i}.ts`, "unrelated filler")),
+      symbol(
+        "src/payment/error.ts#PaymentFailedError",
+        "PaymentFailedError",
+        "src/payment/error.ts",
+        "payment failure error",
+      ),
+      symbol(
+        "src/payment/handler.ts#handlePaymentFailure",
+        "handlePaymentFailure",
+        "src/payment/handler.ts",
+        "handle payment failure",
+      ),
+      ...Array.from({ length: 20 }, (_, i) =>
+        symbol(`src/filler/${i}.ts#noop${i}`, `noop${i}`, `src/filler/${i}.ts`, "unrelated filler"),
+      ),
     ];
     const bodies = new Map(symbols.map((entry) => [entry.id, entry.body]));
-    const index = buildIndex({ symbols, edges: [], ambiguousCalls: 0 } satisfies IndexInput, (entry) => bodies.get(entry.id) ?? "", 0.8, true);
+    const index = buildIndex(
+      { symbols, edges: [], ambiguousCalls: 0 } satisfies IndexInput,
+      (entry) => bodies.get(entry.id) ?? "",
+      0.8,
+      true,
+    );
 
     const result = await queryCodebase(root, index, {
       query: "Where is `PaymentFailedError` handled by the payment service?",
@@ -187,14 +256,19 @@ describe("codebase query", () => {
     };
     const symbols = [entry, decode, newDecoder];
     const bodies = new Map(symbols.map((entry) => [entry.id, entry.body]));
-    const index = buildIndex({
-      symbols,
-      edges: [
-        { from: entry.id, to: decode.id, weight: 1, strategy: "uniqueName" },
-        { from: decode.id, to: newDecoder.id, weight: 1, strategy: "uniqueName" },
-      ],
-      ambiguousCalls: 0,
-    } satisfies IndexInput, (entry) => bodies.get(entry.id) ?? "", 0.8, true);
+    const index = buildIndex(
+      {
+        symbols,
+        edges: [
+          { from: entry.id, to: decode.id, weight: 1, strategy: "uniqueName" },
+          { from: decode.id, to: newDecoder.id, weight: 1, strategy: "uniqueName" },
+        ],
+        ambiguousCalls: 0,
+      } satisfies IndexInput,
+      (entry) => bodies.get(entry.id) ?? "",
+      0.8,
+      true,
+    );
 
     const result = await queryCodebase(root, index, {
       query: "Where does `Decode` delegate?",
@@ -223,21 +297,44 @@ describe("codebase query", () => {
     const root = await fixture({
       "src/types.ts": "class Base { run() {} }\nclass Worker extends Base { run() {} }\n",
     });
-    const base = { ...symbol("src/types.ts#Base", "Base", "src/types.ts", "base type"), kind: "class" as const, container: null };
-    const worker = { ...symbol("src/types.ts#Worker", "Worker", "src/types.ts", "worker type"), kind: "class" as const, container: null, startLine: 1 };
-    const baseRun = { ...symbol("src/types.ts#Base.run", "run", "src/types.ts", "base run"), kind: "method" as const, container: "Base" };
-    const workerRun = { ...symbol("src/types.ts#Worker.run", "run", "src/types.ts", "worker run"), kind: "method" as const, container: "Worker", startLine: 1 };
+    const base = {
+      ...symbol("src/types.ts#Base", "Base", "src/types.ts", "base type"),
+      kind: "class" as const,
+      container: null,
+    };
+    const worker = {
+      ...symbol("src/types.ts#Worker", "Worker", "src/types.ts", "worker type"),
+      kind: "class" as const,
+      container: null,
+      startLine: 1,
+    };
+    const baseRun = {
+      ...symbol("src/types.ts#Base.run", "run", "src/types.ts", "base run"),
+      kind: "method" as const,
+      container: "Base",
+    };
+    const workerRun = {
+      ...symbol("src/types.ts#Worker.run", "run", "src/types.ts", "worker run"),
+      kind: "method" as const,
+      container: "Worker",
+      startLine: 1,
+    };
     const symbols = [base, worker, baseRun, workerRun];
     const bodies = new Map(symbols.map((entry) => [entry.id, entry.body]));
-    const index = buildIndex({
-      symbols,
-      edges: [],
-      typeRelations: [
-        { subtype: worker.id, supertype: base.id, kind: "extends" },
-        { subtype: workerRun.id, supertype: baseRun.id, kind: "overrides" },
-      ],
-      ambiguousCalls: 0,
-    } satisfies IndexInput, (entry) => bodies.get(entry.id) ?? "", 0.8, true);
+    const index = buildIndex(
+      {
+        symbols,
+        edges: [],
+        typeRelations: [
+          { subtype: worker.id, supertype: base.id, kind: "extends" },
+          { subtype: workerRun.id, supertype: baseRun.id, kind: "overrides" },
+        ],
+        ambiguousCalls: 0,
+      } satisfies IndexInput,
+      (entry) => bodies.get(entry.id) ?? "",
+      0.8,
+      true,
+    );
 
     const result = await queryCodebase(root, index, {
       query: "Trace `Worker` hierarchy.",

@@ -16,10 +16,12 @@ const roots: string[] = [];
 async function fixture(files: Readonly<Record<string, string>>): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "repository-context-"));
   roots.push(root);
-  await Promise.all(Object.entries(files).map(async ([file, content]) => {
-    await mkdir(join(root, file, ".."), { recursive: true });
-    await writeFile(join(root, file), content, "utf8");
-  }));
+  await Promise.all(
+    Object.entries(files).map(async ([file, content]) => {
+      await mkdir(join(root, file, ".."), { recursive: true });
+      await writeFile(join(root, file), content, "utf8");
+    }),
+  );
   return root;
 }
 
@@ -28,28 +30,101 @@ afterEach(async () => {
 });
 
 function index() {
-  return buildIndex({
-    symbols: [
-      { id: "src/charge.ts#charge", name: "charge", kind: "function", container: null, file: "src/charge.ts", startLine: 0, endLine: 4, tokens: 10 },
-      { id: "src/worker.py#run", name: "run", kind: "function", container: null, file: "src/worker.py", startLine: 0, endLine: 4, tokens: 10 },
-    ],
-    edges: [],
-    ambiguousCalls: 0,
-  }, () => "", 0.6, true);
+  return buildIndex(
+    {
+      symbols: [
+        {
+          id: "src/charge.ts#charge",
+          name: "charge",
+          kind: "function",
+          container: null,
+          file: "src/charge.ts",
+          startLine: 0,
+          endLine: 4,
+          tokens: 10,
+        },
+        {
+          id: "src/worker.py#run",
+          name: "run",
+          kind: "function",
+          container: null,
+          file: "src/worker.py",
+          startLine: 0,
+          endLine: 4,
+          tokens: 10,
+        },
+      ],
+      edges: [],
+      ambiguousCalls: 0,
+    },
+    () => "",
+    0.6,
+    true,
+  );
 }
 
 function coreLanguageIndex() {
-  return buildIndex({
-    symbols: [
-      { id: "native/main.c#run", name: "run", kind: "function", container: null, file: "native/main.c", startLine: 0, endLine: 1, tokens: 1 },
-      { id: "native/main.cpp#run", name: "run", kind: "function", container: null, file: "native/main.cpp", startLine: 0, endLine: 1, tokens: 1 },
-      { id: "svc/main.go#Run", name: "Run", kind: "function", container: null, file: "svc/main.go", startLine: 0, endLine: 1, tokens: 1 },
-      { id: "app/Main.java#run", name: "run", kind: "method", container: "Main", file: "app/Main.java", startLine: 0, endLine: 1, tokens: 1 },
-      { id: "crate/lib.rs#run", name: "run", kind: "function", container: null, file: "crate/lib.rs", startLine: 0, endLine: 1, tokens: 1 },
-    ],
-    edges: [],
-    ambiguousCalls: 0,
-  }, () => "", 0.6, true);
+  return buildIndex(
+    {
+      symbols: [
+        {
+          id: "native/main.c#run",
+          name: "run",
+          kind: "function",
+          container: null,
+          file: "native/main.c",
+          startLine: 0,
+          endLine: 1,
+          tokens: 1,
+        },
+        {
+          id: "native/main.cpp#run",
+          name: "run",
+          kind: "function",
+          container: null,
+          file: "native/main.cpp",
+          startLine: 0,
+          endLine: 1,
+          tokens: 1,
+        },
+        {
+          id: "svc/main.go#Run",
+          name: "Run",
+          kind: "function",
+          container: null,
+          file: "svc/main.go",
+          startLine: 0,
+          endLine: 1,
+          tokens: 1,
+        },
+        {
+          id: "app/Main.java#run",
+          name: "run",
+          kind: "method",
+          container: "Main",
+          file: "app/Main.java",
+          startLine: 0,
+          endLine: 1,
+          tokens: 1,
+        },
+        {
+          id: "crate/lib.rs#run",
+          name: "run",
+          kind: "function",
+          container: null,
+          file: "crate/lib.rs",
+          startLine: 0,
+          endLine: 1,
+          tokens: 1,
+        },
+      ],
+      edges: [],
+      ambiguousCalls: 0,
+    },
+    () => "",
+    0.6,
+    true,
+  );
 }
 
 describe("buildRepositoryContext", () => {
@@ -64,7 +139,9 @@ describe("buildRepositoryContext", () => {
 
   it("discovers allowlisted npm checks and never includes secret file contents", async () => {
     const root = await fixture({
-      "package.json": JSON.stringify({ scripts: { test: "vitest run", typecheck: "tsc --noEmit", lint: "eslint .", deploy: "./deploy.sh" } }),
+      "package.json": JSON.stringify({
+        scripts: { test: "vitest run", typecheck: "tsc --noEmit", lint: "eslint .", deploy: "./deploy.sh" },
+      }),
       "package-lock.json": "{}",
       "AGENTS.md": "Use npm test before handing off.\n",
       "CONTRIBUTING.md": "Keep focused tests small.\n",
@@ -154,13 +231,17 @@ describe("buildRepositoryContext", () => {
   });
 
   it("uses only the remote snapshot for repository orientation", () => {
-    const context = buildRepositoryContextFromSources("/remote/project", index(), new Map([
-      ["package.json", JSON.stringify({ scripts: { test: "vitest run" } })],
-      ["pnpm-lock.yaml", "lockfileVersion: '9.0'"],
-      ["AGENTS.md", "Run the focused test first."],
-      ["README.md", "# Remote workspace"],
-      [".env", "DATABASE_URL=must-not-appear"],
-    ]));
+    const context = buildRepositoryContextFromSources(
+      "/remote/project",
+      index(),
+      new Map([
+        ["package.json", JSON.stringify({ scripts: { test: "vitest run" } })],
+        ["pnpm-lock.yaml", "lockfileVersion: '9.0'"],
+        ["AGENTS.md", "Run the focused test first."],
+        ["README.md", "# Remote workspace"],
+        [".env", "DATABASE_URL=must-not-appear"],
+      ]),
+    );
 
     expect(context.root).toBe("/remote/project");
     expect(context.packageManager).toBe("pnpm");

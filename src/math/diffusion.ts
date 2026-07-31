@@ -22,11 +22,7 @@
  * the discarded tail equals 1 − Σ_{k≤K} e^{−t}·t^k/k! times the seed mass.
  */
 
-import {
-  applyTransposedTransition,
-  degrees,
-  type SparseMatrix,
-} from "./sparse.js";
+import { applyTransposedTransition, degrees, type SparseMatrix } from "./sparse.js";
 
 export interface DiffusionOptions {
   /**

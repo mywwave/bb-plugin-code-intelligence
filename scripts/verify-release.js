@@ -38,9 +38,7 @@ export async function validateReleaseArtifacts(root = process.cwd()) {
   for (const metadataName of ["server.meta.json"]) {
     const metadata = await readJson(resolve(dist, metadataName));
     if (metadata.pluginId !== PLUGIN_ID) {
-      throw new Error(
-        `${metadataName}: expected pluginId "${PLUGIN_ID}", got ${JSON.stringify(metadata.pluginId)}`,
-      );
+      throw new Error(`${metadataName}: expected pluginId "${PLUGIN_ID}", got ${JSON.stringify(metadata.pluginId)}`);
     }
     if (metadata.pluginVersion !== packageJson.version) {
       throw new Error(

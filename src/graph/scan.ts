@@ -61,9 +61,7 @@ export interface SourceFileInventory {
   readonly skipped: ScanSkipped;
 }
 
-export async function listRepositorySourceFiles(
-  options: ScanOptions,
-): Promise<SourceFileInventory> {
+export async function listRepositorySourceFiles(options: ScanOptions): Promise<SourceFileInventory> {
   const root = options.root;
   const maxBytes = options.maxFileBytes ?? MAX_FILE_BYTES;
   const respectGitignore = options.respectGitignore ?? true;
@@ -89,11 +87,7 @@ export async function listRepositorySourceFiles(
 
     for (const entry of entries) {
       if (ALWAYS_SKIP.has(entry.name)) continue;
-      if (
-        !includeHiddenDirectories &&
-        entry.name.startsWith(".") &&
-        entry.isDirectory()
-      ) {
+      if (!includeHiddenDirectories && entry.name.startsWith(".") && entry.isDirectory()) {
         continue;
       }
 

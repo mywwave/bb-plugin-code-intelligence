@@ -109,15 +109,16 @@ export const FEEDBACK_SURFACE_MIGRATIONS: readonly string[] = [
  * whether the route avoided more discovery, while recall only exists after a
  * file change and must never be treated as a zero for read-only tasks.
  */
-export function summarizeFeedback(
-  observations: readonly FeedbackObservation[],
-): readonly FeedbackSurfaceSummary[] {
-  const summaries = new Map<FeedbackSurface, {
-    answers: number;
-    outcomes: number;
-    searchesAfter: number;
-    recalls: number[];
-  }>();
+export function summarizeFeedback(observations: readonly FeedbackObservation[]): readonly FeedbackSurfaceSummary[] {
+  const summaries = new Map<
+    FeedbackSurface,
+    {
+      answers: number;
+      outcomes: number;
+      searchesAfter: number;
+      recalls: number[];
+    }
+  >();
 
   for (const observation of observations) {
     const summary = summaries.get(observation.surface) ?? {
@@ -142,9 +143,10 @@ export function summarizeFeedback(
       outcomes: summary.outcomes,
       averageSearchesAfter: summary.outcomes === 0 ? null : summary.searchesAfter / summary.outcomes,
       recallSamples: summary.recalls.length,
-      averageRecall: summary.recalls.length === 0
-        ? null
-        : summary.recalls.reduce((total, recall) => total + recall, 0) / summary.recalls.length,
+      averageRecall:
+        summary.recalls.length === 0
+          ? null
+          : summary.recalls.reduce((total, recall) => total + recall, 0) / summary.recalls.length,
     }))
     .sort((left, right) => left.surface.localeCompare(right.surface));
 }
@@ -162,10 +164,7 @@ export interface ThreadEvent {
  * Only events after `sequenceAtAnswer` count: what the agent did before we
  * answered says nothing about our answer.
  */
-export function deriveOutcome(
-  answer: PendingAnswer,
-  events: readonly ThreadEvent[],
-): SessionOutcome {
+export function deriveOutcome(answer: PendingAnswer, events: readonly ThreadEvent[]): SessionOutcome {
   let searchesAfter = 0;
   const changed = new Set<string>();
 

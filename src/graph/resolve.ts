@@ -183,13 +183,7 @@ export function resolveProject(files: readonly FileExtraction[]): ResolutionResu
         continue;
       }
 
-      const proposals = proposeAll(
-        call,
-        candidates,
-        importsByFile,
-        typesByFile,
-        methodsByClass,
-      );
+      const proposals = proposeAll(call, candidates, importsByFile, typesByFile, methodsByClass);
 
       for (const [strategy, symbol] of proposals) {
         if (symbol.id === call.fromSymbolId) continue;
@@ -260,7 +254,8 @@ function resolveTypeRelations(
       classesByFileName.set(`${symbol.file}\u0000${symbol.name}`, local);
     }
   }
-  const exact = (candidates: readonly CodeSymbol[]): CodeSymbol | null => candidates.length === 1 ? candidates[0]! : null;
+  const exact = (candidates: readonly CodeSymbol[]): CodeSymbol | null =>
+    candidates.length === 1 ? candidates[0]! : null;
   const resolveClass = (file: string, name: string): CodeSymbol | null =>
     exact(classesByFileName.get(`${file}\u0000${name}`) ?? []) ?? exact(classesByName.get(name) ?? []);
   const methodsByClassId = new Map<string, CodeSymbol[]>();
@@ -281,8 +276,11 @@ function resolveTypeRelations(
       result.push({ subtype: subtype.id, supertype: supertype.id, kind: relation.kind });
       if (relation.kind !== "extends") continue;
       for (const method of methodsByClassId.get(subtype.id) ?? []) {
-        const overridden = (methodsByClassId.get(supertype.id) ?? []).filter((candidate) => candidate.name === method.name);
-        if (overridden.length === 1) result.push({ subtype: method.id, supertype: overridden[0]!.id, kind: "overrides" });
+        const overridden = (methodsByClassId.get(supertype.id) ?? []).filter(
+          (candidate) => candidate.name === method.name,
+        );
+        if (overridden.length === 1)
+          result.push({ subtype: method.id, supertype: overridden[0]!.id, kind: "overrides" });
       }
     }
   }
@@ -391,9 +389,7 @@ function proposeAll(
   if (call.receiver !== null) {
     const receiverType = typesByFile.get(call.file)?.get(call.receiver);
     if (receiverType !== undefined) {
-      const owned = (methodsByClass.get(receiverType) ?? []).filter(
-        (method) => method.name === call.name,
-      );
+      const owned = (methodsByClass.get(receiverType) ?? []).filter((method) => method.name === call.name);
       if (owned.length === 1) proposals.set("typedReceiver", owned[0]!);
     }
   }
@@ -454,11 +450,7 @@ const SOURCE_EXTENSIONS = [
  * point outside the indexed set by definition, so resolving them would invent
  * edges to files we never parsed.
  */
-export function resolveModulePath(
-  fromFile: string,
-  specifier: string,
-  knownFiles: ReadonlySet<string>,
-): string | null {
+export function resolveModulePath(fromFile: string, specifier: string, knownFiles: ReadonlySet<string>): string | null {
   if (!specifier.startsWith(".")) return null;
 
   const base = joinPath(dirname(fromFile), specifier);

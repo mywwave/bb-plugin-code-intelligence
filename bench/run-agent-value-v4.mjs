@@ -27,9 +27,7 @@ function runBb(args) {
 function median(values) {
   const sorted = [...values].sort((left, right) => left - right);
   const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 0
-    ? (sorted[middle - 1] + sorted[middle]) / 2
-    : sorted[middle];
+  return sorted.length % 2 === 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle];
 }
 
 function readAllEvents(threadId) {
@@ -37,7 +35,16 @@ function readAllEvents(threadId) {
   let afterSequence = 0;
   while (true) {
     const page = JSON.parse(
-      runBb(["thread", "log", threadId, "--json", "--limit", String(EVENT_PAGE_SIZE), "--after-seq", String(afterSequence)]),
+      runBb([
+        "thread",
+        "log",
+        threadId,
+        "--json",
+        "--limit",
+        String(EVENT_PAGE_SIZE),
+        "--after-seq",
+        String(afterSequence),
+      ]),
     );
     if (!Array.isArray(page)) throw new Error(`Expected an event array for thread ${threadId}`);
     events.push(...page);
@@ -83,12 +90,13 @@ if (process.argv.includes("--help")) {
         ...collectAgentValueV4Metrics(readAllEvents(run.threadId), taskById.get(run.taskId).expected),
       };
     });
-    await writeFile(outputPath, `${JSON.stringify({ suite: contract.suite, contract: contractReference, runs }, null, 2)}\n`);
+    await writeFile(
+      outputPath,
+      `${JSON.stringify({ suite: contract.suite, contract: contractReference, runs }, null, 2)}\n`,
+    );
   }
 
-  const tasks = selectedTask
-    ? contract.tasks.filter((task) => task.id === selectedTask)
-    : contract.tasks;
+  const tasks = selectedTask ? contract.tasks.filter((task) => task.id === selectedTask) : contract.tasks;
   if (tasks.length === 0) throw new Error(`No task named ${selectedTask}`);
   for (const task of tasks) {
     for (let repetition = 1; repetition <= contract.protocol.repetitionsPerTaskPerArm; repetition += 1) {
@@ -97,18 +105,29 @@ if (process.argv.includes("--help")) {
         continue;
       }
       const startedAt = Date.now();
-      const spawned = JSON.parse(runBb([
-        "thread", "spawn",
-        "--project", project,
-        "--provider", "codex",
-        "--model", "gpt-5.6-sol",
-        "--reasoning-level", "low",
-        "--permission-mode", "full",
-        "--visibility", "hidden",
-        "--title", `Evidence v4 ${arm} ${task.id} r${repetition}`,
-        "--prompt", task.prompt,
-        "--json",
-      ]));
+      const spawned = JSON.parse(
+        runBb([
+          "thread",
+          "spawn",
+          "--project",
+          project,
+          "--provider",
+          "codex",
+          "--model",
+          "gpt-5.6-sol",
+          "--reasoning-level",
+          "low",
+          "--permission-mode",
+          "full",
+          "--visibility",
+          "hidden",
+          "--title",
+          `Evidence v4 ${arm} ${task.id} r${repetition}`,
+          "--prompt",
+          task.prompt,
+          "--json",
+        ]),
+      );
       let waitError = null;
       try {
         runBb(["thread", "wait", spawned.id, "--timeout", "180", "--json"]);
@@ -129,10 +148,13 @@ if (process.argv.includes("--help")) {
         runnerElapsedMs: Date.now() - startedAt,
       };
       runs.push(result);
-      await writeFile(outputPath, `${JSON.stringify({ suite: contract.suite, contract: contractReference, runs }, null, 2)}\n`);
+      await writeFile(
+        outputPath,
+        `${JSON.stringify({ suite: contract.suite, contract: contractReference, runs }, null, 2)}\n`,
+      );
       console.log(
         `${arm} ${task.id} r${repetition}: ${result.correct ? "correct" : "incorrect"}, ` +
-        `${result.completedDiscoveryOperations} operations, ${result.timingStatus} timing, ${result.runnerElapsedMs}ms`,
+          `${result.completedDiscoveryOperations} operations, ${result.timingStatus} timing, ${result.runnerElapsedMs}ms`,
       );
     }
   }
@@ -140,6 +162,6 @@ if (process.argv.includes("--help")) {
   const completeTimelineRuns = armRuns.filter((run) => Number.isFinite(run.turnTimelineMs));
   console.log(
     `${arm}: ${armRuns.filter((run) => run.correct).length}/${armRuns.length} correct; ` +
-    `median event timeline ${median(completeTimelineRuns.map((run) => run.turnTimelineMs))}ms`,
+      `median event timeline ${median(completeTimelineRuns.map((run) => run.turnTimelineMs))}ms`,
   );
 }

@@ -5,7 +5,8 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
-const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+const SEMVER =
+  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 
 async function git(root, args) {
   const { stdout } = await execFileAsync("git", args, { cwd: root });
@@ -56,9 +57,11 @@ export async function prepareRelease(version, root = process.cwd(), options = {}
   await writeJson(lockfilePath, lockfile);
   await writeFile(changelogPath, nextChangelog);
 
-  const build = options.build ?? (async () => {
-    await execFileAsync("npm", ["run", "build:plugin"], { cwd: repositoryRoot, stdio: "inherit" });
-  });
+  const build =
+    options.build ??
+    (async () => {
+      await execFileAsync("npm", ["run", "build:plugin"], { cwd: repositoryRoot, stdio: "inherit" });
+    });
   await build();
 }
 

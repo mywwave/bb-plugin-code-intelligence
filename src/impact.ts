@@ -68,10 +68,7 @@ function location(index: RetrievalIndex, node: number): ImpactLocation {
  * only when exactly one indexed symbol has that name; otherwise the caller
  * must supply the id or file it actually intends to change.
  */
-export function resolveImpactTargets(
-  index: RetrievalIndex,
-  requested: readonly string[],
-): ImpactTargetResolution {
+export function resolveImpactTargets(index: RetrievalIndex, requested: readonly string[]): ImpactTargetResolution {
   const nodes = new Set<number>();
   const unresolved: string[] = [];
   const ambiguous: AmbiguousImpactTarget[] = [];

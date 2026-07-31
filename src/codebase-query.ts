@@ -15,10 +15,35 @@ import {
 import { retrieve, tokenizeIdentifiers, type RetrievalIndex, type RetrievalResult } from "./retrieval.js";
 
 const NATURAL_LANGUAGE_NOISE = new Set([
-  "about", "code", "creation", "does", "execute", "executes", "explain", "find",
-  "from", "handled", "handle", "handles", "how", "implementation", "into", "main",
-  "orchestrate", "orchestrates", "queued", "server", "show", "that", "this", "thread",
-  "where", "which", "with", "work", "works",
+  "about",
+  "code",
+  "creation",
+  "does",
+  "execute",
+  "executes",
+  "explain",
+  "find",
+  "from",
+  "handled",
+  "handle",
+  "handles",
+  "how",
+  "implementation",
+  "into",
+  "main",
+  "orchestrate",
+  "orchestrates",
+  "queued",
+  "server",
+  "show",
+  "that",
+  "this",
+  "thread",
+  "where",
+  "which",
+  "with",
+  "work",
+  "works",
 ]);
 const MAX_PATTERNS = 3;
 const EXACT_LIMIT_PER_PATTERN = 8;
@@ -103,9 +128,9 @@ export function buildCodebaseQueryPatterns(query: string): readonly string[] {
     ...[...query.matchAll(/\b[A-Za-z_$][A-Za-z0-9_$]*(?:[A-Z_$][A-Za-z0-9_$]*)+\b/g)].map((match) => match[0]!),
   ]);
   const withoutExplicit = explicit.reduce((text, term) => text.replaceAll(term, " "), query);
-  const natural = unique(tokenizeIdentifiers(withoutExplicit)
-    .filter((term) => !NATURAL_LANGUAGE_NOISE.has(term)))
-    .sort((left, right) => right.length - left.length);
+  const natural = unique(tokenizeIdentifiers(withoutExplicit).filter((term) => !NATURAL_LANGUAGE_NOISE.has(term))).sort(
+    (left, right) => right.length - left.length,
+  );
   return [...explicit, ...natural].slice(0, MAX_PATTERNS);
 }
 
@@ -174,7 +199,8 @@ function candidateTraceNodes(
 ): readonly number[] {
   const anchor = target?.anchor;
   const nameMatches = (node: number): boolean => anchor !== undefined && index.symbols[node]!.name === anchor;
-  const ownerMatches = (node: number): boolean => target?.owner !== undefined && index.symbols[node]!.container === target.owner;
+  const ownerMatches = (node: number): boolean =>
+    target?.owner !== undefined && index.symbols[node]!.container === target.owner;
   const named = new Set<number>();
   for (const match of matches) {
     for (const node of index.nodesByFile.get(matchIndexFile(match.file)) ?? []) {
@@ -243,14 +269,32 @@ function directTrace(
       name: symbol.name,
       file: symbol.file,
       lines: [symbol.startLine + 1, symbol.endLine + 1],
-      callers: uniqueRelations((index.callersOf.get(node) ?? []).map((caller) => relation(index, caller, node))).slice(0, 12),
-      callees: uniqueRelations((index.calleesOf.get(node) ?? []).map((callee) => relation(index, node, callee))).slice(0, 12),
-      supertypes: uniqueRelations((index.supertypesOf.get(node) ?? []).map((target) => relation(index, node, target, "extends"))).slice(0, 12),
-      subtypes: uniqueRelations((index.subtypesOf.get(node) ?? []).map((target) => relation(index, node, target, "extends"))).slice(0, 12),
-      implements: uniqueRelations((index.implementsOf.get(node) ?? []).map((target) => relation(index, node, target, "implements"))).slice(0, 12),
-      implementations: uniqueRelations((index.implementationsOf.get(node) ?? []).map((target) => relation(index, node, target, "implements"))).slice(0, 12),
-      overrides: uniqueRelations((index.overridesOf.get(node) ?? []).map((target) => relation(index, node, target, "overrides"))).slice(0, 12),
-      overriddenBy: uniqueRelations((index.overriddenBy.get(node) ?? []).map((target) => relation(index, node, target, "overrides"))).slice(0, 12),
+      callers: uniqueRelations((index.callersOf.get(node) ?? []).map((caller) => relation(index, caller, node))).slice(
+        0,
+        12,
+      ),
+      callees: uniqueRelations((index.calleesOf.get(node) ?? []).map((callee) => relation(index, node, callee))).slice(
+        0,
+        12,
+      ),
+      supertypes: uniqueRelations(
+        (index.supertypesOf.get(node) ?? []).map((target) => relation(index, node, target, "extends")),
+      ).slice(0, 12),
+      subtypes: uniqueRelations(
+        (index.subtypesOf.get(node) ?? []).map((target) => relation(index, node, target, "extends")),
+      ).slice(0, 12),
+      implements: uniqueRelations(
+        (index.implementsOf.get(node) ?? []).map((target) => relation(index, node, target, "implements")),
+      ).slice(0, 12),
+      implementations: uniqueRelations(
+        (index.implementationsOf.get(node) ?? []).map((target) => relation(index, node, target, "implements")),
+      ).slice(0, 12),
+      overrides: uniqueRelations(
+        (index.overridesOf.get(node) ?? []).map((target) => relation(index, node, target, "overrides")),
+      ).slice(0, 12),
+      overriddenBy: uniqueRelations(
+        (index.overriddenBy.get(node) ?? []).map((target) => relation(index, node, target, "overrides")),
+      ).slice(0, 12),
     });
   }
   return { symbols };
@@ -261,11 +305,12 @@ function traceEvidence(
   trace: CodebaseTraceResult,
 ): readonly CodebaseExactMatch[] {
   if (trace.symbols.length === 0) return matches;
-  return matches.filter((match) => trace.symbols.some((symbol) =>
-    matchIndexFile(match.file) === symbol.file &&
-    match.line >= symbol.lines[0] &&
-    match.line <= symbol.lines[1],
-  ));
+  return matches.filter((match) =>
+    trace.symbols.some(
+      (symbol) =>
+        matchIndexFile(match.file) === symbol.file && match.line >= symbol.lines[0] && match.line <= symbol.lines[1],
+    ),
+  );
 }
 
 /** Combines bounded exact hits with the plugin's existing graph-ranked context. */
@@ -282,16 +327,19 @@ export async function queryCodebase(
   const target = mode === "trace" ? traceTarget(candidates) : undefined;
   const patterns = target === undefined ? (mode === "trace" ? [] : candidates) : [target.anchor];
   const exactStartedAt = performance.now();
-  const exactPromise = patterns.length === 0
-    ? Promise.resolve([])
-    : (options.search ?? ((searchOptions) => instantGrepBatch(root, searchOptions)))(patterns.map((pattern) => ({
-        pattern,
-        caseSensitive: /[A-Z]/.test(pattern),
-        word: true,
-        limit: EXACT_LIMIT_PER_PATTERN,
-        ...(mode === "trace" ? { afterContext: 12 } : {}),
-        signal: options.signal,
-      })));
+  const exactPromise =
+    patterns.length === 0
+      ? Promise.resolve([])
+      : (options.search ?? ((searchOptions) => instantGrepBatch(root, searchOptions)))(
+          patterns.map((pattern) => ({
+            pattern,
+            caseSensitive: /[A-Z]/.test(pattern),
+            word: true,
+            limit: EXACT_LIMIT_PER_PATTERN,
+            ...(mode === "trace" ? { afterContext: 12 } : {}),
+            signal: options.signal,
+          })),
+        );
   if (mode === "explore") {
     // `retrieve` is synchronous but the disk/host search is already in flight,
     // so preserve the original overlap for exploratory queries.
@@ -300,7 +348,9 @@ export async function queryCodebase(
     const graphMs = performance.now() - graphStartedAt;
     const exact = await exactPromise;
     const exactSearchMs = performance.now() - exactStartedAt;
-    const exactMatches = exact.flatMap((result) => result.matches.map((match) => ({ pattern: result.pattern, ...match })));
+    const exactMatches = exact.flatMap((result) =>
+      result.matches.map((match) => ({ pattern: result.pattern, ...match })),
+    );
     return {
       query: options.query,
       mode,
@@ -315,7 +365,9 @@ export async function queryCodebase(
     exactSearchMs = performance.now() - exactStartedAt;
     return result;
   });
-  const exactMatches = exact.flatMap((result) => result.matches.map((match) => ({ pattern: result.pattern, ...match })));
+  const exactMatches = exact.flatMap((result) =>
+    result.matches.map((match) => ({ pattern: result.pattern, ...match })),
+  );
   const graphStartedAt = performance.now();
   const trace = directTrace(index, exactMatches, target);
   const graphMs = performance.now() - graphStartedAt;

@@ -32,9 +32,7 @@ describe("install-git-hooks", () => {
 
     const hook = join(root, ".git", "hooks", "pre-push");
     await expect(readFile(hook, "utf8")).resolves.toContain("npm run check");
-    await expect(readFile(hook, "utf8")).resolves.toContain(
-      "# code-intelligence-managed-pre-push",
-    );
+    await expect(readFile(hook, "utf8")).resolves.toContain("# code-intelligence-managed-pre-push");
     await expect(readFile(hook, "utf8")).resolves.toContain(
       "unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR",
     );
@@ -48,8 +46,6 @@ describe("install-git-hooks", () => {
       stderr: expect.stringContaining("refusing to overwrite"),
     });
 
-    await expect(readFile(join(root, ".git", "hooks", "pre-push"), "utf8")).resolves.toBe(
-      customHook,
-    );
+    await expect(readFile(join(root, ".git", "hooks", "pre-push"), "utf8")).resolves.toBe(customHook);
   });
 });

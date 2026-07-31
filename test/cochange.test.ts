@@ -1,19 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  buildCochangeFromCommits,
-  cochangeScoresForSeeds,
-  parseGitNameOnlyLog,
-} from "../src/cochange.js";
+import { buildCochangeFromCommits, cochangeScoresForSeeds, parseGitNameOnlyLog } from "../src/cochange.js";
 import { buildIndex, retrieve } from "../src/retrieval.js";
 import type { CodeSymbol } from "../src/graph/extract.js";
 
-function symbol(
-  file: string,
-  name: string,
-  tokens = 10,
-  overrides: Partial<CodeSymbol> = {},
-): CodeSymbol {
+function symbol(file: string, name: string, tokens = 10, overrides: Partial<CodeSymbol> = {}): CodeSymbol {
   return {
     id: `${file}#${name}`,
     name,
@@ -32,10 +23,7 @@ describe("parseGitNameOnlyLog", () => {
     const commits = parseGitNameOnlyLog(
       ["abc1234", "src/a.ts", "src/b.ts", "", "def5678", "src/a.ts", "src/c.ts", ""].join("\n"),
     );
-    expect(commits).toEqual([
-      { files: ["src/a.ts", "src/b.ts"] },
-      { files: ["src/a.ts", "src/c.ts"] },
-    ]);
+    expect(commits).toEqual([{ files: ["src/a.ts", "src/b.ts"] }, { files: ["src/a.ts", "src/c.ts"] }]);
   });
 });
 
@@ -106,13 +94,8 @@ describe("retrieve with co-change", () => {
 
 describe("cochangeScoresForSeeds", () => {
   it("accumulates evidence across multiple seeds", () => {
-    const index = buildCochangeFromCommits([
-      { files: ["a.ts", "shared.ts"] },
-      { files: ["b.ts", "shared.ts"] },
-    ]);
+    const index = buildCochangeFromCommits([{ files: ["a.ts", "shared.ts"] }, { files: ["b.ts", "shared.ts"] }]);
     const scores = cochangeScoresForSeeds(index, new Set(["a.ts", "b.ts"]));
-    expect(scores.get("shared.ts")).toBeGreaterThan(
-      cochangeScoresForSeeds(index, new Set(["a.ts"])).get("shared.ts")!,
-    );
+    expect(scores.get("shared.ts")).toBeGreaterThan(cochangeScoresForSeeds(index, new Set(["a.ts"])).get("shared.ts")!);
   });
 });

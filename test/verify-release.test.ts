@@ -63,15 +63,15 @@ describe("validateReleaseArtifacts", () => {
   });
 
   it("rejects an artifact for another plugin id", async () => {
-    await expect(
-      validateReleaseArtifacts(await fixture({ pluginId: "codegraph" })),
-    ).rejects.toThrow('expected pluginId "code-intelligence"');
+    await expect(validateReleaseArtifacts(await fixture({ pluginId: "codegraph" }))).rejects.toThrow(
+      'expected pluginId "code-intelligence"',
+    );
   });
 
   it("rejects a build that omits the parser runtime assets", async () => {
-    await expect(
-      validateReleaseArtifacts(await fixture({ treeSitterAssets: false })),
-    ).rejects.toThrow("missing release artifact");
+    await expect(validateReleaseArtifacts(await fixture({ treeSitterAssets: false }))).rejects.toThrow(
+      "missing release artifact",
+    );
   });
 
   it("rejects a build that omits a core language grammar", async () => {

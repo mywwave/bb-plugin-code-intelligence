@@ -138,9 +138,7 @@ export function saveSnapshot(db: SnapshotStore, root: string, snapshot: Snapshot
  * would risk a wrong graph to save six seconds.
  */
 export function loadSnapshot(db: SnapshotStore, root: string): Snapshot | null {
-  const row = db
-    .prepare(`SELECT * FROM snapshots WHERE root = ? AND version = ?`)
-    .get(root, SNAPSHOT_VERSION) as
+  const row = db.prepare(`SELECT * FROM snapshots WHERE root = ? AND version = ?`).get(root, SNAPSHOT_VERSION) as
     | {
         symbols: Uint8Array;
         edges: Uint8Array;
@@ -190,10 +188,7 @@ export interface FreshnessReport {
  *
  * @param current repository-relative path -> content hash, freshly computed
  */
-export function checkFreshness(
-  snapshot: Snapshot,
-  current: ReadonlyMap<string, string>,
-): FreshnessReport {
+export function checkFreshness(snapshot: Snapshot, current: ReadonlyMap<string, string>): FreshnessReport {
   const changed: string[] = [];
   const added: string[] = [];
   const removed: string[] = [];
@@ -222,10 +217,7 @@ export function stalenessNote(report: FreshnessReport): string | null {
   if (report.changed.length > 0) parts.push(`${report.changed.length} changed`);
   if (report.added.length > 0) parts.push(`${report.added.length} new`);
   if (report.removed.length > 0) parts.push(`${report.removed.length} deleted`);
-  return (
-    `index is stale: ${parts.join(", ")} file(s) since it was built — ` +
-    `results may miss recent edits`
-  );
+  return `index is stale: ${parts.join(", ")} file(s) since it was built — ` + `results may miss recent edits`;
 }
 
 /**

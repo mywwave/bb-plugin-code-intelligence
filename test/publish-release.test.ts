@@ -31,11 +31,7 @@ function releaseRunner(calls: string[][], failStablePush = false) {
   return async (root: string, command: string, args: string[]) => {
     calls.push([command, ...args]);
     if (command === "npm" || command === "gh") return { stdout: "", stderr: "" };
-    if (
-      failStablePush &&
-      command === "git" &&
-      args.join(" ") === "push origin refs/tags/v1.2.3^{}:refs/heads/stable"
-    ) {
+    if (failStablePush && command === "git" && args.join(" ") === "push origin refs/tags/v1.2.3^{}:refs/heads/stable") {
       throw new Error("stable push failed");
     }
     return execFileAsync(command, args, { cwd: root });
@@ -44,15 +40,11 @@ function releaseRunner(calls: string[][], failStablePush = false) {
 
 describe("assertPublishable", () => {
   it("rejects a package/tag mismatch before external publication", async () => {
-    await expect(assertPublishable("1.2.4", await publishFixture())).rejects.toThrow(
-      "does not match package.json",
-    );
+    await expect(assertPublishable("1.2.4", await publishFixture())).rejects.toThrow("does not match package.json");
   });
 
   it("rejects when HEAD is not the pushed origin/main commit", async () => {
-    await expect(assertPublishable("1.2.3", await publishFixture(true))).rejects.toThrow(
-      "must equal origin/main",
-    );
+    await expect(assertPublishable("1.2.3", await publishFixture(true))).rejects.toThrow("must equal origin/main");
   });
 
   it("promotes stable only after creating the GitHub release", async () => {

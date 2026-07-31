@@ -89,9 +89,11 @@ describe("IndexRegistry", () => {
     });
 
     expect(registry.get("/repo/one")).toBe(old);
-    expect(await registry.ensure("/repo/one", async () => {
-      throw new Error("the old index is already usable");
-    })).toBe(old);
+    expect(
+      await registry.ensure("/repo/one", async () => {
+        throw new Error("the old index is already usable");
+      }),
+    ).toBe(old);
 
     release();
     const fresh = await refreshing;

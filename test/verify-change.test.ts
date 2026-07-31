@@ -20,7 +20,9 @@ const impact: ImpactReport = {
   ambiguous: [],
   directCallers: [],
   productionImports: [],
-  testReferences: [{ file: "src/payments/charge.test.ts", targets: ["src/payments/charge.ts#charge"], evidence: ["import"] }],
+  testReferences: [
+    { file: "src/payments/charge.test.ts", targets: ["src/payments/charge.ts#charge"], evidence: ["import"] },
+  ],
 };
 
 describe("planVerification", () => {

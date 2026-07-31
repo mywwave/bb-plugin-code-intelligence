@@ -23,9 +23,7 @@ function itemNames(item) {
 }
 
 function scopeTurnId(event) {
-  return event?.scope?.kind === "turn" && typeof event.scope.turnId === "string"
-    ? event.scope.turnId
-    : null;
+  return event?.scope?.kind === "turn" && typeof event.scope.turnId === "string" ? event.scope.turnId : null;
 }
 
 function bySequence(left, right) {
@@ -49,14 +47,16 @@ function mergeDuration(intervals) {
 }
 
 function finalAnswer(events) {
-  return events
-    .filter(
-      (event) =>
-        event.type === "item/completed" &&
-        event.data?.item?.type === "agentMessage" &&
-        typeof event.data.item.text === "string",
-    )
-    .at(-1)?.data.item.text ?? "";
+  return (
+    events
+      .filter(
+        (event) =>
+          event.type === "item/completed" &&
+          event.data?.item?.type === "agentMessage" &&
+          typeof event.data.item.text === "string",
+      )
+      .at(-1)?.data.item.text ?? ""
+  );
 }
 
 function blankTiming() {
@@ -76,26 +76,18 @@ function blankTiming() {
  * call and full-turn latency.
  */
 export function collectAgentValueV4Metrics(rawEvents, expected) {
-  const events = rawEvents
-    .filter((event) => event !== null && typeof event === "object")
-    .sort(bySequence);
-  const completedTurns = events.filter(
-    (event) => event.type === "turn/completed" && scopeTurnId(event) !== null,
-  );
+  const events = rawEvents.filter((event) => event !== null && typeof event === "object").sort(bySequence);
+  const completedTurns = events.filter((event) => event.type === "turn/completed" && scopeTurnId(event) !== null);
   const selectedCompleted = completedTurns.at(-1);
   const selectedTurnId = selectedCompleted === undefined ? null : scopeTurnId(selectedCompleted);
-  const selected = selectedTurnId === null
-    ? []
-    : events.filter((event) => scopeTurnId(event) === selectedTurnId);
+  const selected = selectedTurnId === null ? [] : events.filter((event) => scopeTurnId(event) === selectedTurnId);
   const answer = finalAnswer(selected);
   const normalizedAnswer = answer.toLowerCase();
   const correct =
     typeof expected?.pathIncludes === "string" &&
     normalizedAnswer.includes(expected.pathIncludes.toLowerCase()) &&
     Array.isArray(expected.requiredTerms) &&
-    expected.requiredTerms.every(
-      (term) => typeof term === "string" && normalizedAnswer.includes(term.toLowerCase()),
-    );
+    expected.requiredTerms.every((term) => typeof term === "string" && normalizedAnswer.includes(term.toLowerCase()));
 
   const diagnostics = {
     unmatchedStartedIds: [],
@@ -111,7 +103,8 @@ export function collectAgentValueV4Metrics(rawEvents, expected) {
   for (const event of selected) {
     if (event.type !== "item/started" && event.type !== "item/completed") continue;
     const item = event.data?.item;
-    if (item === null || typeof item !== "object" || typeof item.id !== "string" || typeof item.type !== "string") continue;
+    if (item === null || typeof item !== "object" || typeof item.id !== "string" || typeof item.type !== "string")
+      continue;
     if (event.type === "item/started") {
       if (starts.has(item.id)) {
         diagnostics.duplicateStartedIds.push(item.id);
@@ -131,7 +124,11 @@ export function collectAgentValueV4Metrics(rawEvents, expected) {
       diagnostics.typeMismatchIds.push(item.id);
       continue;
     }
-    if (!Number.isFinite(started.event.createdAt) || !Number.isFinite(event.createdAt) || event.createdAt < started.event.createdAt) {
+    if (
+      !Number.isFinite(started.event.createdAt) ||
+      !Number.isFinite(event.createdAt) ||
+      event.createdAt < started.event.createdAt
+    ) {
       diagnostics.invalidTimestampIds.push(item.id);
       pairs.push({ item, start: started.event.createdAt, end: event.createdAt, invalid: true });
       continue;
@@ -151,7 +148,9 @@ export function collectAgentValueV4Metrics(rawEvents, expected) {
   const nativeCollapsed = collapsed(nativePairs);
   const shellCollapsed = collapsed(shellPairs);
   const reasoningCollapsed = collapsed(reasoningPairs);
-  diagnostics.zeroDurationIds.push(...[...nativeCollapsed, ...shellCollapsed, ...reasoningCollapsed].map((pair) => pair.item.id));
+  diagnostics.zeroDurationIds.push(
+    ...[...nativeCollapsed, ...shellCollapsed, ...reasoningCollapsed].map((pair) => pair.item.id),
+  );
   const unobservableTimelineChannels = [
     nativeCollapsed.length > 0 ? "nativePlugin" : null,
     shellCollapsed.length > 0 ? "shellSearch" : null,
@@ -173,11 +172,12 @@ export function collectAgentValueV4Metrics(rawEvents, expected) {
     diagnostics.typeMismatchIds.length > 0 ||
     diagnostics.invalidTimestampIds.length > 0;
 
-  const timingStatus = selectedTurnId === null || turnStarted === undefined || turnCompleted === undefined
-    ? "incomplete"
-    : invalid
-      ? "invalid"
-      : "complete";
+  const timingStatus =
+    selectedTurnId === null || turnStarted === undefined || turnCompleted === undefined
+      ? "incomplete"
+      : invalid
+        ? "invalid"
+        : "complete";
   const common = {
     metricsVersion: "v4",
     selectedTurnId,
@@ -193,14 +193,16 @@ export function collectAgentValueV4Metrics(rawEvents, expected) {
   };
   if (timingStatus !== "complete") return { ...common, ...blankTiming() };
 
-  const nativePluginTimelineMs = nativeCollapsed.length > 0 ? null : mergeDuration(nativePairs.map(({ start, end }) => ({ start, end })));
-  const shellSearchTimelineMs = shellCollapsed.length > 0 ? null : mergeDuration(shellPairs.map(({ start, end }) => ({ start, end })));
-  const reasoningTimelineMs = reasoningCollapsed.length > 0 ? null : mergeDuration(reasoningPairs.map(({ start, end }) => ({ start, end })));
-  const classifiedTimelineMs = unobservableTimelineChannels.length > 0 ? null : mergeDuration([
-    ...nativePairs,
-    ...shellPairs,
-    ...reasoningPairs,
-  ].map(({ start, end }) => ({ start, end })));
+  const nativePluginTimelineMs =
+    nativeCollapsed.length > 0 ? null : mergeDuration(nativePairs.map(({ start, end }) => ({ start, end })));
+  const shellSearchTimelineMs =
+    shellCollapsed.length > 0 ? null : mergeDuration(shellPairs.map(({ start, end }) => ({ start, end })));
+  const reasoningTimelineMs =
+    reasoningCollapsed.length > 0 ? null : mergeDuration(reasoningPairs.map(({ start, end }) => ({ start, end })));
+  const classifiedTimelineMs =
+    unobservableTimelineChannels.length > 0
+      ? null
+      : mergeDuration([...nativePairs, ...shellPairs, ...reasoningPairs].map(({ start, end }) => ({ start, end })));
   const turnTimelineMs = turnCompleted.createdAt - turnStarted.createdAt;
   return {
     ...common,

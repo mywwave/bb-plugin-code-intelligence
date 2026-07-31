@@ -27,19 +27,23 @@ export interface VerificationRun {
   readonly durationMs: number;
 }
 
-export type VerificationRunner = (check: VerificationCheck, options: {
-  readonly cwd: string;
-  readonly signal?: AbortSignal;
-  readonly timeoutMs: number;
-  readonly maxOutputBytes: number;
-}) => Promise<VerificationRun>;
+export type VerificationRunner = (
+  check: VerificationCheck,
+  options: {
+    readonly cwd: string;
+    readonly signal?: AbortSignal;
+    readonly timeoutMs: number;
+    readonly maxOutputBytes: number;
+  },
+) => Promise<VerificationRun>;
 
 export interface VerificationResult {
   readonly root: string;
   readonly skipped: readonly VerificationKind[];
-  readonly checks: readonly (VerificationRun & VerificationCheck & {
-    readonly status: "passed" | "failed" | "cancelled";
-  })[];
+  readonly checks: readonly (VerificationRun &
+    VerificationCheck & {
+      readonly status: "passed" | "failed" | "cancelled";
+    })[];
 }
 
 function commandFor(manager: PackageManager): string | null {
@@ -68,9 +72,7 @@ export function planVerification(
       skipped.push(kind);
       continue;
     }
-    const tests = kind === "test" && mode === "affected" && /(?:^|\s)vitest(?:\s|$)/.test(script)
-      ? affectedTests
-      : [];
+    const tests = kind === "test" && mode === "affected" && /(?:^|\s)vitest(?:\s|$)/.test(script) ? affectedTests : [];
     checks.push({ kind, command, args: scriptArgs(kind, tests) });
   }
   return { root: context.root, checks, skipped };
@@ -87,54 +89,59 @@ function appendBounded(value: string, chunk: string, limit: number): string {
   return `${value}${chunk}`.slice(0, limit);
 }
 
-const spawnRunner: VerificationRunner = (check, { cwd, signal, timeoutMs, maxOutputBytes }) => new Promise((resolve, reject) => {
-  const startedAt = Date.now();
-  const child = spawn(check.command, check.args, {
-    cwd,
-    detached: process.platform !== "win32",
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  let stdout = "";
-  let stderr = "";
-  let timedOut = false;
-  const stop = () => {
-    if (child.pid !== undefined && process.platform !== "win32") {
-      try {
-        process.kill(-child.pid, "SIGTERM");
-        return;
-      } catch {
-        // The group may already have exited; the direct kill below is safe.
-      }
-    }
-    child.kill();
-  };
-  const timeout = setTimeout(() => {
-    timedOut = true;
-    stop();
-  }, timeoutMs);
-  const abort = stop;
-  child.stdout.setEncoding("utf8");
-  child.stderr.setEncoding("utf8");
-  child.stdout.on("data", (chunk: string) => { stdout = appendBounded(stdout, chunk, maxOutputBytes); });
-  child.stderr.on("data", (chunk: string) => { stderr = appendBounded(stderr, chunk, maxOutputBytes); });
-  child.on("error", (error) => {
-    clearTimeout(timeout);
-    signal?.removeEventListener("abort", abort);
-    reject(error);
-  });
-  child.on("close", (exitCode) => {
-    clearTimeout(timeout);
-    signal?.removeEventListener("abort", abort);
-    resolve({
-      exitCode: timedOut ? null : exitCode,
-      stdout,
-      stderr: timedOut ? `${stderr}\nverification timed out after ${timeoutMs}ms`.trim() : stderr,
-      durationMs: Date.now() - startedAt,
+const spawnRunner: VerificationRunner = (check, { cwd, signal, timeoutMs, maxOutputBytes }) =>
+  new Promise((resolve, reject) => {
+    const startedAt = Date.now();
+    const child = spawn(check.command, check.args, {
+      cwd,
+      detached: process.platform !== "win32",
+      stdio: ["ignore", "pipe", "pipe"],
     });
+    let stdout = "";
+    let stderr = "";
+    let timedOut = false;
+    const stop = () => {
+      if (child.pid !== undefined && process.platform !== "win32") {
+        try {
+          process.kill(-child.pid, "SIGTERM");
+          return;
+        } catch {
+          // The group may already have exited; the direct kill below is safe.
+        }
+      }
+      child.kill();
+    };
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      stop();
+    }, timeoutMs);
+    const abort = stop;
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk: string) => {
+      stdout = appendBounded(stdout, chunk, maxOutputBytes);
+    });
+    child.stderr.on("data", (chunk: string) => {
+      stderr = appendBounded(stderr, chunk, maxOutputBytes);
+    });
+    child.on("error", (error) => {
+      clearTimeout(timeout);
+      signal?.removeEventListener("abort", abort);
+      reject(error);
+    });
+    child.on("close", (exitCode) => {
+      clearTimeout(timeout);
+      signal?.removeEventListener("abort", abort);
+      resolve({
+        exitCode: timedOut ? null : exitCode,
+        stdout,
+        stderr: timedOut ? `${stderr}\nverification timed out after ${timeoutMs}ms`.trim() : stderr,
+        durationMs: Date.now() - startedAt,
+      });
+    });
+    if (signal?.aborted) abort();
+    else signal?.addEventListener("abort", abort, { once: true });
   });
-  if (signal?.aborted) abort();
-  else signal?.addEventListener("abort", abort, { once: true });
-});
 
 /** Runs a fixed plan sequentially so output and failures stay attributable. */
 export async function runVerification(
@@ -152,7 +159,14 @@ export async function runVerification(
   const checks: VerificationResult["checks"][number][] = [];
   for (const check of plan.checks) {
     if (options.signal?.aborted) {
-      checks.push({ ...check, exitCode: null, stdout: "", stderr: "verification cancelled", durationMs: 0, status: "cancelled" });
+      checks.push({
+        ...check,
+        exitCode: null,
+        stdout: "",
+        stderr: "verification cancelled",
+        durationMs: 0,
+        status: "cancelled",
+      });
       continue;
     }
     try {
