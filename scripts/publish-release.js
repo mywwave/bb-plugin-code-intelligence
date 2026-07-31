@@ -41,14 +41,16 @@ export async function assertPublishable(version, root = process.cwd()) {
   if (remoteTags) throw new Error(`release tag already exists on origin: ${tag}`);
 }
 
-export async function publishRelease(version, root = process.cwd()) {
+export async function publishRelease(version, root = process.cwd(), options = {}) {
   const repositoryRoot = resolve(root);
+  const runner = options.runCommand ?? run;
   await assertPublishable(version, repositoryRoot);
-  await run(repositoryRoot, "npm", ["run", "check"], { stdio: "inherit" });
+  await runner(repositoryRoot, "npm", ["run", "check"], { stdio: "inherit" });
   const tag = `v${version}`;
-  await run(repositoryRoot, "git", ["tag", "-a", tag, "-m", `Release ${tag}`]);
-  await run(repositoryRoot, "git", ["push", "origin", tag], { stdio: "inherit" });
-  await run(repositoryRoot, "gh", ["release", "create", tag, "--verify-tag", "--generate-notes", "--fail-on-no-commits"], { stdio: "inherit" });
+  await runner(repositoryRoot, "git", ["tag", "-a", tag, "-m", `Release ${tag}`]);
+  await runner(repositoryRoot, "git", ["push", "origin", tag], { stdio: "inherit" });
+  await runner(repositoryRoot, "gh", ["release", "create", tag, "--verify-tag", "--generate-notes", "--fail-on-no-commits"], { stdio: "inherit" });
+  await runner(repositoryRoot, "git", ["push", "origin", `refs/tags/${tag}^{}:refs/heads/stable`], { stdio: "inherit" });
 }
 
 const invokedPath = process.argv[1] === undefined ? null : resolve(process.argv[1]);
