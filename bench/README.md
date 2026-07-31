@@ -16,12 +16,15 @@ The Java host-snapshot glob regression discovered by that suite has its own
 [targeted A/B record](results/2026-07-31-java-glob-regression-v1.md); it does
 not replace the cross-language result.
 
-`tasks/agent-value-v4.json` is the next, diagnostic-only suite. It keeps the
-same revision-pinned five fixtures but replaces three one-hop questions with
-multi-hop navigation tasks. Its runner is intentionally separate from v2 so
-historical evidence cannot be rewritten. It records observed BB event-timeline
-intervals alongside correctness and discovery routing; these intervals are not
-CPU profiles, hidden-reasoning measurements, or causal latency claims.
+[`tasks/agent-value-v4.json`](tasks/agent-value-v4.json) is the current,
+diagnostic multi-hop suite. It keeps the same revision-pinned five fixtures but
+replaces three one-hop questions with multi-hop navigation tasks. Its runner is
+intentionally separate from v2 so historical evidence cannot be rewritten.
+The published [v4 report](results/2026-07-31-agent-value-v4.md) and
+[raw rows](results/2026-07-31-agent-value-v4.json) record observed BB
+event-timeline intervals alongside correctness and discovery routing; these
+intervals are not CPU profiles, hidden-reasoning measurements, or causal
+latency claims.
 
 ## Controlled variables
 
@@ -36,9 +39,9 @@ not tell the agent to prefer a particular tool.
 1. **Baseline**: no Code Intelligence plugin is installed.
 2. **Code Intelligence**: install the managed Git plugin at the tested commit.
 
-Run every task the number of times declared in its contract. The current suite
-uses five repetitions per task and arm. Results intentionally label their sample
-size and do not generalize beyond their declared tasks.
+Run every task the number of times declared in its contract. v2 uses five
+repetitions per task and arm; v4 currently uses three. Results intentionally
+label their sample size and do not generalize beyond their declared tasks.
 
 The included runner records a single task against its own BB project root;
 repeat it for each fixture and arm, using the exact project, arm, and output
