@@ -6,6 +6,8 @@ All notable user-visible changes are recorded here. The format follows
 
 ## Unreleased
 
+## [0.1.0] - 2026-07-31
+
 ### Added
 
 - Code Intelligence native tools for exact code search, bounded exploration,

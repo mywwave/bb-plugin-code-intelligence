@@ -20,7 +20,10 @@ async function releaseFixture() {
     join(root, "package-lock.json"),
     JSON.stringify({ name: "fixture", version: "0.1.0", lockfileVersion: 3, packages: { "": { version: "0.1.0" } } }, null, 2),
   );
-  await writeFile(join(root, "CHANGELOG.md"), "# Changelog\n\n## Unreleased\n\n### Added\n\n- Fixture change.\n");
+  await writeFile(
+    join(root, "CHANGELOG.md"),
+    "# Changelog\n\n## Unreleased\n\n### Added\n\n- Fixture change.\n\n## Versioning\n\n- Fixture policy.\n",
+  );
   await execFileAsync("git", ["add", "."], { cwd: root });
   await execFileAsync("git", ["commit", "--quiet", "-m", "fixture"], { cwd: root });
   return root;
@@ -36,9 +39,9 @@ describe("prepareRelease", () => {
     const lockfile = JSON.parse(await readFile(join(root, "package-lock.json"), "utf8"));
     expect(lockfile.version).toBe("1.2.3");
     expect(lockfile.packages[""].version).toBe("1.2.3");
-    await expect(readFile(join(root, "CHANGELOG.md"), "utf8")).resolves.toContain(
-      `## [1.2.3] - ${new Date().toISOString().slice(0, 10)}`,
-    );
+    const changelog = await readFile(join(root, "CHANGELOG.md"), "utf8");
+    expect(changelog).toContain(`## [1.2.3] - ${new Date().toISOString().slice(0, 10)}`);
+    expect(changelog).toContain("- Fixture change.\n\n## Versioning");
   });
 
   it("rejects an invalid version or dirty repository before writing", async () => {

@@ -29,7 +29,8 @@ function promoteUnreleased(changelog, version) {
   const content = changelog.slice(afterMarker, nextHeading === -1 ? changelog.length : nextHeading).trim();
   if (content.length === 0) throw new Error("CHANGELOG.md Unreleased section must contain release notes");
   const date = new Date().toISOString().slice(0, 10);
-  return `${changelog.slice(0, afterMarker)}\n## [${version}] - ${date}\n\n${content}\n${nextHeading === -1 ? "" : changelog.slice(nextHeading + 1)}`;
+  const remainder = nextHeading === -1 ? "" : changelog.slice(nextHeading + 1);
+  return `${changelog.slice(0, afterMarker)}\n## [${version}] - ${date}\n\n${content}\n${remainder ? `\n${remainder}` : ""}`;
 }
 
 export async function prepareRelease(version, root = process.cwd(), options = {}) {
