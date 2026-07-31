@@ -4,7 +4,8 @@ Run every item from a clean clone before tagging a release.
 
 - [ ] `npm ci`
 - [ ] `npm run check` (typecheck, tests, plugin build, parser-asset copy, and
-  `node scripts/verify-release.js`).
+  `node scripts/verify-release.js`; fails when generated `dist/` is not
+  committed).
 - [ ] Inspect `dist/server.meta.json`: it reports `pluginId`
   `code-intelligence` and the package version.
 - [ ] Install into a disposable BB data directory and confirm `running` status.

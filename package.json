@@ -54,7 +54,7 @@
     "verify": "npm run typecheck && npm test",
     "check": "npm run verify:release",
     "build:plugin": "NODE_PATH=./node_modules bb plugin build . && node scripts/copy-tree-sitter-assets.js",
-    "verify:release": "npm run verify && npm run build:plugin && node scripts/verify-release.js",
+    "verify:release": "npm run verify && npm run build:plugin && node scripts/verify-release.js && node scripts/verify-clean-dist.js",
     "install-git-hooks": "node scripts/install-git-hooks.js"
   },
   "keywords": [

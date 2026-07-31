@@ -21,7 +21,8 @@ npm ci && npm run check
 `npm run check` is the required local gate. It runs type checking, the Vitest
 suite, builds the managed-install plugin artifact, copies parser assets, and
 validates the release artifact. GitHub Actions are intentionally not required
-for this repository.
+for this repository. If it reports that `dist/` differs, review and commit the
+generated artifact before opening a pull request.
 
 To run the same gate before each push, opt in to the managed hook:
 
