@@ -35,6 +35,9 @@ describe("install-git-hooks", () => {
     await expect(readFile(hook, "utf8")).resolves.toContain(
       "# code-intelligence-managed-pre-push",
     );
+    await expect(readFile(hook, "utf8")).resolves.toContain(
+      "unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE",
+    );
   });
 
   it("refuses to replace a hook it did not install", async () => {
