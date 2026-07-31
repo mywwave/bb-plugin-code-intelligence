@@ -19360,9 +19360,11 @@ async function plugin(bb) {
         const rows = all.map(
           (entry) => {
             const inventory = remoteInventories.get(entry.root);
-            return `${entry.root}
-  symbols: ${entry.index.symbols.length}, edges: ${entry.edgeCount}, completeness: >= ${(entry.index.graphCompleteness * 100).toFixed(1)}%` + (inventory === void 0 ? "" : `
-  ${formatRemoteInventory(inventory)}`);
+            return [
+              entry.root,
+              `  symbols: ${entry.index.symbols.length}, edges: ${entry.edgeCount}, completeness: >= ${(entry.index.graphCompleteness * 100).toFixed(1)}%`,
+              ...inventory === void 0 ? [] : [`  ${formatRemoteInventory(inventory)}`]
+            ].join("\n");
           }
         );
         return {
