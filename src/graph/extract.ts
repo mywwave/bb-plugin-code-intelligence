@@ -95,6 +95,13 @@ const DEFINITION_TYPES: ReadonlyMap<string, SymbolKind> = new Map([
   ["method_definition", "method"],
 ]);
 
+interface Definition {
+  readonly kind: SymbolKind;
+  readonly name: string;
+  /** Explicit owner for receiver methods; otherwise the lexical class owner. */
+  readonly container?: string | null;
+}
+
 // Interfaces and their method signatures are deliberately NOT extracted.
 //
 // It looks like they should be: bb has 153 classes against 12 981 functions,
@@ -189,43 +196,37 @@ export async function extractFile(
     let nextEnclosing = enclosing;
     let nextContainer = container;
 
-    const bound = functionBinding(node);
-    const kind = DEFINITION_TYPES.get(node.type) ?? bound?.kind;
-    if (kind !== undefined) {
-      const name = bound?.name ?? nameOf(node);
-      if (name !== null) {
-        const id = `${file}#${name}`;
+    const profileContainer = containerFor(node, language);
+    if (profileContainer !== null) nextContainer = profileContainer;
+
+    const definition = definitionFor(node, language, nextContainer);
+    if (definition !== null) {
+        const id = `${file}#${definition.name}`;
         symbols.push({
           id,
-          name,
-          kind,
-          container: kind === "method" ? container : null,
+          name: definition.name,
+          kind: definition.kind,
+          container: definition.kind === "method" ? (definition.container ?? nextContainer) : null,
           file,
           startLine: node.startPosition.row,
           endLine: node.endPosition.row,
           tokens: estimateTokens(node),
         });
         nextEnclosing = id;
-        if (kind === "class") nextContainer = name;
-      }
+        if (definition.kind === "class") nextContainer = definition.name;
     }
 
-    collectTypeBindings(node, file, nextContainer, types);
+    collectTypeBindings(node, language, file, nextContainer, types);
 
-    if (node.type === "call_expression" || node.type === "call") {
-      const callee = node.childForFieldName("function");
-      if (callee !== null) {
-        const site = readCallee(callee);
-        if (site !== null) {
+    const call = callFor(node, language);
+    if (call !== null) {
           calls.push({
             fromSymbolId: nextEnclosing,
-            name: site.name,
-            receiver: site.receiver,
+            name: call.name,
+            receiver: call.receiver,
             file,
             line: node.startPosition.row,
           });
-        }
-      }
     }
 
     /**
@@ -259,7 +260,7 @@ export async function extractFile(
       }
     }
 
-    collectImports(node, file, imports);
+    collectImports(node, language, file, imports);
 
     for (let i = 0; i < node.namedChildCount; i++) {
       const child = node.namedChild(i);
@@ -270,6 +271,79 @@ export async function extractFile(
   visit(root, null, null, 0);
 
   return { file, symbols, calls, imports, types, truncated };
+}
+
+function definitionFor(node: AstNode, language: LanguageId, container: string | null): Definition | null {
+  const bound = functionBinding(node);
+  const existingKind = DEFINITION_TYPES.get(node.type) ?? bound?.kind;
+  const existingName = bound?.name ?? nameOf(node);
+  if (existingKind !== undefined && existingName !== null) {
+    return { kind: existingKind, name: existingName };
+  }
+
+  if (language === "go") {
+    if (node.type === "type_spec") {
+      const name = nameOf(node);
+      return name === null ? null : { kind: "class", name };
+    }
+    if (node.type === "method_declaration") {
+      const name = nameOf(node);
+      const receiver = node.childForFieldName("receiver");
+      const receiverType = receiver === null ? null : receiverTypeName(receiver);
+      return name === null ? null : { kind: "method", name, container: receiverType };
+    }
+  }
+
+  if (language === "rust") {
+    if (node.type === "struct_item") {
+      const name = nameOf(node);
+      return name === null ? null : { kind: "class", name };
+    }
+    if (node.type === "function_item") {
+      const name = nameOf(node);
+      return name === null ? null : { kind: container === null ? "function" : "method", name };
+    }
+  }
+
+  if (language === "c" || language === "cpp") {
+    if (node.type === "class_specifier" || node.type === "struct_specifier") {
+      const name = nameOf(node);
+      return name === null ? null : { kind: "class", name };
+    }
+    if (node.type === "function_definition") {
+      const declarator = node.childForFieldName("declarator");
+      const name = declarator === null ? null : declaratorName(declarator);
+      return name === null ? null : { kind: container === null ? "function" : "method", name };
+    }
+  }
+
+  if (language === "java" && node.type === "method_declaration") {
+    const name = nameOf(node);
+    return name === null ? null : { kind: "method", name };
+  }
+
+  return null;
+}
+
+function containerFor(node: AstNode, language: LanguageId): string | null {
+  if (language === "rust" && node.type === "impl_item") {
+    return node.childForFieldName("type")?.text ?? null;
+  }
+  return null;
+}
+
+function declaratorName(node: AstNode): string | null {
+  if (node.type === "identifier" || node.type === "field_identifier") return node.text;
+  const nested = node.childForFieldName("declarator");
+  return nested === null ? null : declaratorName(nested);
+}
+
+function receiverTypeName(node: AstNode): string | null {
+  const parameter = node.namedChild(0);
+  if (parameter === null) return null;
+  const type = parameter.childForFieldName("type");
+  if (type === null) return null;
+  return type.type === "pointer_type" ? type.namedChild(0)?.text ?? null : type.text;
 }
 
 /** Reads a `: Foo` annotation or a `new Foo()` initialiser into a type name. */
@@ -290,6 +364,7 @@ function declaredType(node: AstNode): string | null {
 
 function collectTypeBindings(
   node: AstNode,
+  language: LanguageId,
   file: string,
   container: string | null,
   out: TypeBinding[],
@@ -311,6 +386,29 @@ function collectTypeBindings(
       out.push({ file, name: pattern.text, type, container });
     }
   }
+
+  if (language === "java" && (node.type === "field_declaration" || node.type === "formal_parameter")) {
+    const nameNode = node.type === "field_declaration"
+      ? node.childForFieldName("declarator")?.childForFieldName("name") ?? null
+      : node.childForFieldName("name");
+    const type = node.childForFieldName("type");
+    if (nameNode !== null && type !== null) {
+      out.push({ file, name: nameNode.text, type: type.text, container });
+    }
+  }
+}
+
+function callFor(node: AstNode, language: LanguageId): { name: string; receiver: string | null } | null {
+  if (node.type === "call_expression" || node.type === "call") {
+    const callee = node.childForFieldName("function");
+    return callee === null ? null : readCallee(callee);
+  }
+  if (language === "java" && node.type === "method_invocation") {
+    const name = node.childForFieldName("name");
+    if (name === null) return null;
+    return { name: name.text, receiver: node.childForFieldName("object")?.text ?? null };
+  }
+  return null;
 }
 
 /** Reads `foo`, `obj.foo`, or `a.b.foo` into a name plus optional receiver. */
@@ -325,10 +423,15 @@ function readCallee(callee: AstNode): { name: string; receiver: string | null } 
     if (property === null) return null;
     return { name: property.text, receiver: object?.text ?? null };
   }
+  if (callee.type === "selector_expression") {
+    const field = callee.childForFieldName("field");
+    const operand = callee.childForFieldName("operand");
+    return field === null ? null : { name: field.text, receiver: operand?.text ?? null };
+  }
   return null;
 }
 
-function collectImports(node: AstNode, file: string, out: ImportBinding[]): void {
+function collectImports(node: AstNode, language: LanguageId, file: string, out: ImportBinding[]): void {
   // ESM: import { a, b as c } from "mod";  import d from "mod";
   if (node.type === "import_statement") {
     const source = node.childForFieldName("source");
@@ -355,6 +458,49 @@ function collectImports(node: AstNode, file: string, out: ImportBinding[]): void
         if (alias !== null) out.push({ file, source: specifier, local: alias.text });
       }
     }
+    return;
+  }
+
+  if (language === "go" && node.type === "import_spec") {
+    const path = node.childForFieldName("path");
+    const name = node.childForFieldName("name");
+    if (path !== null && name !== null) {
+      out.push({ file, source: stripQuotes(path.text), local: name.text });
+    }
+    return;
+  }
+
+  if (language === "rust" && node.type === "use_declaration") {
+    const argument = node.childForFieldName("argument");
+    if (argument !== null) {
+      const segments = argument.text.split("::");
+      const local = segments[segments.length - 1] ?? "";
+      if (local !== "" && local !== "*") out.push({ file, source: argument.text, local });
+    }
+    return;
+  }
+
+  if (language === "rust" && node.type === "mod_item") {
+    const name = nameOf(node);
+    if (name !== null) out.push({ file, source: `./${name}`, local: name });
+    return;
+  }
+
+  if ((language === "c" || language === "cpp") && node.type === "preproc_include") {
+    const path = node.childForFieldName("path");
+    if (path === null || !path.text.startsWith('"')) return;
+    const source = stripQuotes(path.text);
+    const local = source.split("/").pop()?.replace(/\.[^.]+$/, "") ?? "";
+    if (local !== "") out.push({ file, source: source.startsWith(".") ? source : `./${source}`, local });
+    return;
+  }
+
+  if (language === "java" && node.type === "import_declaration") {
+    const path = node.namedChild(0);
+    if (path === null) return;
+    const source = path.text;
+    const local = source.split(".").pop() ?? "";
+    if (local !== "" && local !== "*") out.push({ file, source, local });
   }
 }
 

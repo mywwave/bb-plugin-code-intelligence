@@ -77,6 +77,102 @@ describe("extractFile", () => {
     expect(result.imports[0]?.local).toBe("helper");
   });
 
+  it("extracts symbols, calls, imports, and direct type facts from core languages", async () => {
+    const go = await extractFile(
+      "svc/service.go",
+      "go",
+      [
+        "package svc",
+        'import util "example.com/util"',
+        "type Service struct{}",
+        "func (s *Service) Run() { helper(); util.Log() }",
+        "func helper() {}",
+      ].join("\n"),
+    );
+    expect(go.symbols.map((symbol) => `${symbol.kind}:${symbol.name}:${symbol.container}`)).toEqual([
+      "class:Service:null",
+      "method:Run:Service",
+      "function:helper:null",
+    ]);
+    expect(go.calls).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "helper", receiver: null }),
+      expect.objectContaining({ name: "Log", receiver: "util" }),
+    ]));
+    expect(go.imports).toContainEqual({
+      file: "svc/service.go",
+      source: "example.com/util",
+      local: "util",
+    });
+
+    const rust = await extractFile(
+      "crate/lib.rs",
+      "rust",
+      [
+        "use crate::util::helper;",
+        "mod local;",
+        "struct Service;",
+        "impl Service { fn run(&self) { helper(); } }",
+        "fn helper() {}",
+      ].join("\n"),
+    );
+    expect(rust.symbols.map((symbol) => `${symbol.kind}:${symbol.name}:${symbol.container}`)).toEqual([
+      "class:Service:null",
+      "method:run:Service",
+      "function:helper:null",
+    ]);
+    expect(rust.calls).toContainEqual(expect.objectContaining({ name: "helper", receiver: null }));
+    expect(rust.imports).toEqual(expect.arrayContaining([
+      { file: "crate/lib.rs", source: "crate::util::helper", local: "helper" },
+      { file: "crate/lib.rs", source: "./local", local: "local" },
+    ]));
+
+    const c = await extractFile(
+      "native/main.c",
+      "c",
+      ['#include "util.h"', "int helper(void) { return 1; }", "int run(void) { return helper(); }"].join("\n"),
+    );
+    expect(c.symbols.map((symbol) => `${symbol.kind}:${symbol.name}`)).toEqual([
+      "function:helper",
+      "function:run",
+    ]);
+    expect(c.calls).toContainEqual(expect.objectContaining({ name: "helper", receiver: null }));
+    expect(c.imports).toContainEqual({ file: "native/main.c", source: "./util.h", local: "util" });
+
+    const cpp = await extractFile(
+      "native/service.cpp",
+      "cpp",
+      [
+        "class Service { public: void run() { helper(); } };",
+        "void helper() {}",
+      ].join("\n"),
+    );
+    expect(cpp.symbols.map((symbol) => `${symbol.kind}:${symbol.name}:${symbol.container}`)).toEqual([
+      "class:Service:null",
+      "method:run:Service",
+      "function:helper:null",
+    ]);
+    expect(cpp.calls).toContainEqual(expect.objectContaining({ name: "helper", receiver: null }));
+
+    const java = await extractFile(
+      "app/Service.java",
+      "java",
+      [
+        "import app.Util;",
+        "class Service {",
+        "  Util util;",
+        "  void run() { util.help(); }",
+        "}",
+      ].join("\n"),
+    );
+    expect(java.symbols.map((symbol) => `${symbol.kind}:${symbol.name}:${symbol.container}`)).toEqual([
+      "class:Service:null",
+      "method:run:Service",
+    ]);
+    expect(java.calls).toContainEqual(expect.objectContaining({ name: "help", receiver: "util" }));
+    expect(java.imports).toContainEqual({ file: "app/Service.java", source: "app.Util", local: "Util" });
+    expect(java.types).toContainEqual({ file: "app/Service.java", name: "util", type: "Util", container: "Service" });
+  });
+
   it("survives a syntax error without losing the rest of the file", async () => {
     // tree-sitter is error-tolerant; a broken region must not discard the file.
     const result = await ts(
