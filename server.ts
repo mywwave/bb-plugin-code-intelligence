@@ -123,7 +123,6 @@ const indexViewSchema = z.object({
       excluded: z.number().int(),
       tooLarge: z.number().int(),
       nonUtf8: z.number().int(),
-      unreadable: z.number().int(),
     }),
   }).nullable(),
 });
@@ -231,6 +230,10 @@ export default async function plugin(bb: BbPluginApi) {
   const isRemoteRoot = (root: string): boolean => remoteWorkspaces.has(root);
   const inventoryLimits = (root: string): readonly string[] =>
     remoteInventoryBlindSpots(remoteInventories.get(root));
+  const inventoryLimitField = (root: string): Record<string, readonly string[]> => {
+    const limits = inventoryLimits(root);
+    return limits.length === 0 ? {} : { inventoryLimits: limits };
+  };
 
   async function readRemoteRepositoryState(
     root: string,
@@ -270,6 +273,7 @@ export default async function plugin(bb: BbPluginApi) {
         part.startsWith(".") ||
         ["node_modules", "dist", "build", "out", "target", "vendor", "venv", "__pycache__", "coverage"].includes(part),
       ),
+      throwIfAborted: () => throwIfAborted(signal),
       read: async (file) => {
         throwIfAborted(signal);
         return bb.sdk.projects.fileContent({
@@ -816,8 +820,8 @@ export default async function plugin(bb: BbPluginApi) {
             : "Use content mode on a selected file only when you need source lines.";
         return JSON.stringify(
           searchPatterns.length === 1
-            ? { engine: isRemoteRoot(root) ? "BB host-file snapshot" : "ripgrep", root: rootLabel(root), mode: regex ? "regex" : "literal", outputMode, ...results[0], inventoryLimits: inventoryLimits(root), next: next(results[0]!) }
-            : { engine: isRemoteRoot(root) ? "BB host-file snapshot" : "ripgrep", root: rootLabel(root), outputMode, results, inventoryLimits: inventoryLimits(root), next: "Each result is independent; answer from exact hits or narrow only the query that needs it." },
+            ? { engine: isRemoteRoot(root) ? "BB host-file snapshot" : "ripgrep", root: rootLabel(root), mode: regex ? "regex" : "literal", outputMode, ...results[0], ...inventoryLimitField(root), next: next(results[0]!) }
+            : { engine: isRemoteRoot(root) ? "BB host-file snapshot" : "ripgrep", root: rootLabel(root), outputMode, results, ...inventoryLimitField(root), next: "Each result is independent; answer from exact hits or narrow only the query that needs it." },
           null,
           2,
         );
@@ -904,7 +908,7 @@ export default async function plugin(bb: BbPluginApi) {
           graphCompleteness: ready.index.graphCompletenessReliable
             ? `>= ${(ready.index.graphCompleteness * 100).toFixed(0)}%`
             : "not estimable — too few edges were found by more than one strategy",
-          inventoryLimits: inventoryLimits(ready.root),
+          ...inventoryLimitField(ready.root),
           timingMs: { index: indexMs, ...result.timingMs },
           next: result.mode === "trace"
             ? trace?.symbols.length === 0
@@ -1083,7 +1087,7 @@ export default async function plugin(bb: BbPluginApi) {
             ? `>= ${(ready.index.graphCompleteness * 100).toFixed(0)}%`
             : "not estimable — too few edges were found by more than one strategy",
           ambiguousCalls: ready.index.ambiguousCalls,
-          inventoryLimits: inventoryLimits(ready.root),
+          ...inventoryLimitField(ready.root),
           note:
             "graphCompleteness is a lower bound from capture-recapture over resolution " +
             "strategies. Reflection, dynamic dispatch and DI containers are invisible to " +
@@ -1171,7 +1175,7 @@ export default async function plugin(bb: BbPluginApi) {
             ? `>= ${(ready.index.graphCompleteness * 100).toFixed(0)}% of call edges (lower bound)`
             : "not estimable — too few overlapping resolution strategies",
           ambiguousCalls: ready.index.ambiguousCalls,
-          inventoryLimits: inventoryLimits(ready.root),
+          ...inventoryLimitField(ready.root),
           note: "Direct static references only. Reflection, dynamic dispatch, DI, generated code, and unparsed languages are outside the graph.",
           next: report.ambiguous.length > 0
             ? "Choose an exact symbol id or source-file path, then call again."
@@ -1382,7 +1386,7 @@ export default async function plugin(bb: BbPluginApi) {
             graphCompleteness: ready.index.graphCompletenessReliable
               ? `>= ${(ready.index.graphCompleteness * 100).toFixed(0)}% of call edges (lower bound)`
               : "not estimable — too few overlapping resolution strategies",
-            inventoryLimits: inventoryLimits(ready.root),
+            ...inventoryLimitField(ready.root),
             notProven: "Passing declared checks does not prove reflection, dynamic dispatch, DI, generated code, or unparsed languages are safe.",
           },
         }, null, 2);

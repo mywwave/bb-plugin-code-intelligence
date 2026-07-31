@@ -42,7 +42,6 @@ describe("collectRemoteSources", () => {
         excluded: 1,
         tooLarge: 1,
         nonUtf8: 1,
-        unreadable: 0,
       },
     });
   });
@@ -61,12 +60,23 @@ describe("collectRemoteSources", () => {
     })).rejects.toThrow("host read failed");
   });
 
+  it("checks cancellation before skipping an ignored path", async () => {
+    await expect(collectRemoteSources({
+      paths: ["ignored.ts"],
+      truncated: false,
+      isIgnored: () => true,
+      isExcluded: () => false,
+      throwIfAborted: () => { throw new Error("indexing aborted"); },
+      read: async () => ({ content: "", contentEncoding: "utf8", sizeBytes: 0 }),
+    })).rejects.toThrow("indexing aborted");
+  });
+
   it("makes known remote inventory omissions visible to absence-sensitive answers", () => {
     expect(remoteInventoryBlindSpots({
       enumerated: 10_000,
       indexed: 9_990,
       truncated: true,
-      skipped: { ignored: 2, excluded: 3, tooLarge: 1, nonUtf8: 2, unreadable: 0 },
+      skipped: { ignored: 2, excluded: 3, tooLarge: 1, nonUtf8: 2 },
     })).toEqual([
       "The remote host listing was truncated after 10000 paths; unenumerated paths are unknown, so an absent match, symbol, or caller is inconclusive.",
       "The remote snapshot excluded 3 readable files (tooLarge=1, nonUtf8=2); an absent match, symbol, or caller may be in excluded content.",
@@ -78,9 +88,9 @@ describe("collectRemoteSources", () => {
       enumerated: 10_000,
       indexed: 9_990,
       truncated: true,
-      skipped: { ignored: 2, excluded: 3, tooLarge: 1, nonUtf8: 2, unreadable: 2 },
+      skipped: { ignored: 2, excluded: 3, tooLarge: 1, nonUtf8: 2 },
     })).toBe(
-      "remote inventory: indexed 9990/10000 enumerated; skipped ignored=2, excluded=3, tooLarge=1, nonUtf8=2, unreadable=2; host listing truncated, remaining paths unknown",
+      "remote inventory: indexed 9990/10000 enumerated; skipped ignored=2, excluded=3, tooLarge=1, nonUtf8=2; host listing truncated, remaining paths unknown",
     );
   });
 });

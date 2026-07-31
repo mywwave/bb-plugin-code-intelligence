@@ -17733,7 +17733,7 @@ function parseContextArgs(argv) {
 var REMOTE_MAX_FILE_BYTES = 512 * 1024;
 function formatRemoteInventory(inventory) {
   const { skipped } = inventory;
-  return `remote inventory: indexed ${inventory.indexed}/${inventory.enumerated} enumerated; skipped ignored=${skipped.ignored}, excluded=${skipped.excluded}, tooLarge=${skipped.tooLarge}, nonUtf8=${skipped.nonUtf8}, unreadable=${skipped.unreadable}` + (inventory.truncated ? "; host listing truncated, remaining paths unknown" : "");
+  return `remote inventory: indexed ${inventory.indexed}/${inventory.enumerated} enumerated; skipped ignored=${skipped.ignored}, excluded=${skipped.excluded}, tooLarge=${skipped.tooLarge}, nonUtf8=${skipped.nonUtf8}` + (inventory.truncated ? "; host listing truncated, remaining paths unknown" : "");
 }
 function remoteInventoryBlindSpots(inventory) {
   if (inventory === void 0) return [];
@@ -17753,7 +17753,7 @@ function remoteInventoryBlindSpots(inventory) {
 }
 async function collectRemoteSources(options) {
   const paths = [...options.paths].sort((left, right) => left.localeCompare(right));
-  const skipped = { ignored: 0, excluded: 0, tooLarge: 0, nonUtf8: 0, unreadable: 0 };
+  const skipped = { ignored: 0, excluded: 0, tooLarge: 0, nonUtf8: 0 };
   const sources = /* @__PURE__ */ new Map();
   const concurrency = Math.max(1, Math.min(options.concurrency ?? 16, paths.length));
   let cursor = 0;
@@ -17761,6 +17761,7 @@ async function collectRemoteSources(options) {
     while (true) {
       const path = paths[cursor++];
       if (path === void 0) return;
+      options.throwIfAborted?.();
       if (options.isIgnored(path)) {
         skipped.ignored++;
         continue;
@@ -17769,20 +17770,16 @@ async function collectRemoteSources(options) {
         skipped.excluded++;
         continue;
       }
-      try {
-        const file2 = await options.read(path);
-        if (file2.contentEncoding !== "utf8") {
-          skipped.nonUtf8++;
-          continue;
-        }
-        if (file2.sizeBytes > REMOTE_MAX_FILE_BYTES) {
-          skipped.tooLarge++;
-          continue;
-        }
-        sources.set(path, file2.content);
-      } catch (error51) {
-        throw error51;
+      const file2 = await options.read(path);
+      if (file2.contentEncoding !== "utf8") {
+        skipped.nonUtf8++;
+        continue;
       }
+      if (file2.sizeBytes > REMOTE_MAX_FILE_BYTES) {
+        skipped.tooLarge++;
+        continue;
+      }
+      sources.set(path, file2.content);
     }
   };
   await Promise.all(Array.from({ length: concurrency }, readNext));
@@ -18165,8 +18162,7 @@ var indexViewSchema = external_exports.object({
       ignored: external_exports.number().int(),
       excluded: external_exports.number().int(),
       tooLarge: external_exports.number().int(),
-      nonUtf8: external_exports.number().int(),
-      unreadable: external_exports.number().int()
+      nonUtf8: external_exports.number().int()
     })
   }).nullable()
 });
@@ -18242,6 +18238,10 @@ async function plugin(bb) {
   const rootLabel = (root) => remoteWorkspaces.get(root)?.path ?? root;
   const isRemoteRoot = (root) => remoteWorkspaces.has(root);
   const inventoryLimits = (root) => remoteInventoryBlindSpots(remoteInventories.get(root));
+  const inventoryLimitField = (root) => {
+    const limits = inventoryLimits(root);
+    return limits.length === 0 ? {} : { inventoryLimits: limits };
+  };
   async function readRemoteRepositoryState(root, signal) {
     const workspace = remoteWorkspaces.get(root);
     if (workspace === void 0) throw new Error(`remote workspace is unavailable: ${root}`);
@@ -18274,6 +18274,7 @@ async function plugin(bb) {
       isExcluded: (file2) => file2.split("/").some(
         (part) => part.startsWith(".") || ["node_modules", "dist", "build", "out", "target", "vendor", "venv", "__pycache__", "coverage"].includes(part)
       ),
+      throwIfAborted: () => throwIfAborted(signal),
       read: async (file2) => {
         throwIfAborted(signal);
         return bb.sdk.projects.fileContent({
@@ -18671,7 +18672,7 @@ async function plugin(bb) {
         }
         const next = (result) => result.truncated ? "Refine pattern/glob or call again with nextOffset before treating this search as exhaustive." : outputMode === "content" ? "For a pure location/existence answer, cite this exact hit directly. Use code_graph_context only for structural questions." : "Use content mode on a selected file only when you need source lines.";
         return JSON.stringify(
-          searchPatterns.length === 1 ? { engine: isRemoteRoot(root) ? "BB host-file snapshot" : "ripgrep", root: rootLabel(root), mode: regex ? "regex" : "literal", outputMode, ...results[0], inventoryLimits: inventoryLimits(root), next: next(results[0]) } : { engine: isRemoteRoot(root) ? "BB host-file snapshot" : "ripgrep", root: rootLabel(root), outputMode, results, inventoryLimits: inventoryLimits(root), next: "Each result is independent; answer from exact hits or narrow only the query that needs it." },
+          searchPatterns.length === 1 ? { engine: isRemoteRoot(root) ? "BB host-file snapshot" : "ripgrep", root: rootLabel(root), mode: regex ? "regex" : "literal", outputMode, ...results[0], ...inventoryLimitField(root), next: next(results[0]) } : { engine: isRemoteRoot(root) ? "BB host-file snapshot" : "ripgrep", root: rootLabel(root), outputMode, results, ...inventoryLimitField(root), next: "Each result is independent; answer from exact hits or narrow only the query that needs it." },
           null,
           2
         );
@@ -18749,7 +18750,7 @@ async function plugin(bb) {
           ...context === void 0 ? {} : { graphFiles: context.files.slice(0, 12) },
           ...trace === void 0 ? {} : { trace: trace.symbols },
           graphCompleteness: ready.index.graphCompletenessReliable ? `>= ${(ready.index.graphCompleteness * 100).toFixed(0)}%` : "not estimable \u2014 too few edges were found by more than one strategy",
-          inventoryLimits: inventoryLimits(ready.root),
+          ...inventoryLimitField(ready.root),
           timingMs: { index: indexMs, ...result.timingMs },
           next: result.mode === "trace" ? trace?.symbols.length === 0 ? "No indexed definition enclosed an exact hit. Refine the identifier or use instant_grep; an empty trace is not proof of no relation." : "The exact definition and direct relation above answer this trace. Answer now; do not call instant_grep or code_graph_context unless the user asks for source beyond this result or a wider structure." : "Choose an exact hit or symbol from this response. Use instant_grep for a narrower exact follow-up, then symbol_lookup or code_graph_context for structure."
         }, null, 2);
@@ -18882,7 +18883,7 @@ async function plugin(bb) {
           staleness: staleness.get(ready.root) ?? null,
           graphCompleteness: ready.index.graphCompletenessReliable ? `>= ${(ready.index.graphCompleteness * 100).toFixed(0)}%` : "not estimable \u2014 too few edges were found by more than one strategy",
           ambiguousCalls: ready.index.ambiguousCalls,
-          inventoryLimits: inventoryLimits(ready.root),
+          ...inventoryLimitField(ready.root),
           note: "graphCompleteness is a lower bound from capture-recapture over resolution strategies. Reflection, dynamic dispatch and DI containers are invisible to static analysis and are not counted at all." + (config2.includeSnippets ? " Snippets are truncated bodies \u2014 open the file only when you need lines beyond them." : "")
         },
         null,
@@ -18945,7 +18946,7 @@ async function plugin(bb) {
           ...report,
           graphCompleteness: ready.index.graphCompletenessReliable ? `>= ${(ready.index.graphCompleteness * 100).toFixed(0)}% of call edges (lower bound)` : "not estimable \u2014 too few overlapping resolution strategies",
           ambiguousCalls: ready.index.ambiguousCalls,
-          inventoryLimits: inventoryLimits(ready.root),
+          ...inventoryLimitField(ready.root),
           note: "Direct static references only. Reflection, dynamic dispatch, DI, generated code, and unparsed languages are outside the graph.",
           next: report.ambiguous.length > 0 ? "Choose an exact symbol id or source-file path, then call again." : "Use prechange_impact before editing a resolved implementation target."
         }, null, 2);
@@ -19112,7 +19113,7 @@ async function plugin(bb) {
           verification,
           blindSpots: {
             graphCompleteness: ready.index.graphCompletenessReliable ? `>= ${(ready.index.graphCompleteness * 100).toFixed(0)}% of call edges (lower bound)` : "not estimable \u2014 too few overlapping resolution strategies",
-            inventoryLimits: inventoryLimits(ready.root),
+            ...inventoryLimitField(ready.root),
             notProven: "Passing declared checks does not prove reflection, dynamic dispatch, DI, generated code, or unparsed languages are safe."
           }
         }, null, 2);
