@@ -173,6 +173,26 @@ describe("instantGrep", () => {
     });
   });
 
+  it("treats a basename glob as recursive, matching ripgrep semantics", async () => {
+    const sources = new Map([
+      ["src/main/java/App.java", "class App {}\n"],
+      ["examples/Example.java", "class Example {}\n"],
+      ["README.md", "class Documentation {}\n"],
+    ]);
+
+    const result = await instantGrepSources(sources, {
+      pattern: "class",
+      word: true,
+      glob: "*.java",
+      limit: 10,
+    });
+
+    expect(result.matches.map((match) => match.file)).toEqual([
+      "./examples/Example.java",
+      "./src/main/java/App.java",
+    ]);
+  });
+
   it("reuses a prepared remote snapshot without changing the exact-search contract", async () => {
     const sources = new Map([
       ["z/second.ts", "const PaymentFailedError = true;\n"],

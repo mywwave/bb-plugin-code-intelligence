@@ -45,6 +45,39 @@ describe("codebase query", () => {
     ]);
   });
 
+  it("reduces a qualified method signature to its callable identifier for a direct trace", async () => {
+    const root = await fixture({
+      "a/example.java": Array.from({ length: 9 }, () => "new Gson().fromJson(\"{}\", String.class);").join("\n"),
+      "src/gson.java": "class Gson { void fromJson(String json, Class type) { delegate(); } }\n",
+    });
+    const fromJson = symbol("src/gson.java#fromJson", "fromJson", "src/gson.java", "fromJson delegates");
+    const delegate = symbol("src/gson.java#delegate", "delegate", "src/gson.java", "delegate parses");
+    const bodies = new Map([[fromJson.id, fromJson.body], [delegate.id, delegate.body]]);
+    const index = buildIndex({
+      symbols: [fromJson, delegate],
+      edges: [
+        { from: fromJson.id, to: delegate.id, weight: 1, strategy: "uniqueName" },
+        { from: fromJson.id, to: delegate.id, weight: 1, strategy: "uniqueName" },
+      ],
+      ambiguousCalls: 0,
+    } satisfies IndexInput, (entry) => bodies.get(entry.id) ?? "", 0.8, true);
+
+    const result = await queryCodebase(root, index, {
+      query: "Trace `Gson.fromJson(String, Class)` and its direct delegation.",
+      mode: "trace",
+      budgetTokens: 160,
+    });
+
+    expect(result.patterns).toEqual(["fromJson"]);
+    expect(result.trace?.symbols).toEqual([
+      expect.objectContaining({
+        id: fromJson.id,
+        callees: [expect.objectContaining({ id: delegate.id })],
+      }),
+    ]);
+    expect(result.exactMatches.every((match) => match.file === "./src/gson.java")).toBe(true);
+  });
+
   it("returns both exact disk hits and graph-ranked entry points", async () => {
     const root = await fixture({
       "src/payment/error.ts": "export class PaymentFailedError extends Error {}\n",

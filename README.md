@@ -121,6 +121,13 @@ broader conclusion. The earlier TypeScript
 [routing pilot](bench/results/2026-07-31-agent-routing-smoke-v1.md) remains as
 historical evidence.
 
+That A/B also found a concrete Java host-snapshot incompatibility: a familiar
+`*.java` glob did not reach nested source directories. The fixed, targeted
+[Java regression A/B](bench/results/2026-07-31-java-glob-regression-v1.md)
+kept correctness at `5 / 5`, reduced discovery operations from `8` to `6`, and
+reduced median full-turn time from `11.7 s` to `9.2 s`. It is deliberately
+reported as a one-task regression result, not an aggregate performance claim.
+
 Run `npm test` for the current automated-suite total. A fresh managed Git
 installation of the current `0.1.0` stable release on BB `0.34.0` indexed this repository into `227` symbols and
 `2,296` edges with a reported completeness lower bound of `69.6%`; see the

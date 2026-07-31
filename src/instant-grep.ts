@@ -379,7 +379,11 @@ export async function instantGrep(root: string, options: InstantGrepOptions): Pr
 
 function globMatches(path: string, glob: string | undefined): boolean {
   if (glob === undefined) return true;
-  let expression = "^";
+  // Ripgrep applies a glob without a path separator to every basename in the
+  // tree (`--glob '*.java'` matches `src/main/App.java`). The host snapshot
+  // receives repository-relative paths, so mirror that implicit recursive
+  // prefix before translating the remaining glob syntax.
+  let expression = glob.includes("/") ? "^" : "^(?:.*/)?";
   for (let index = 0; index < glob.length; index++) {
     const character = glob[index]!;
     if (character === "*") {

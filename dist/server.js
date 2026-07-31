@@ -16910,7 +16910,7 @@ async function instantGrep(root, options) {
 }
 function globMatches(path, glob) {
   if (glob === void 0) return true;
-  let expression = "^";
+  let expression = glob.includes("/") ? "^" : "^(?:.*/)?";
   for (let index = 0; index < glob.length; index++) {
     const character = glob[index];
     if (character === "*") {
@@ -17046,6 +17046,14 @@ function buildCodebaseQueryPatterns(query) {
   const natural = unique(tokenizeIdentifiers(withoutExplicit).filter((term) => !NATURAL_LANGUAGE_NOISE.has(term))).sort((left, right) => right.length - left.length);
   return [...explicit, ...natural].slice(0, MAX_PATTERNS);
 }
+function traceAnchor(candidates) {
+  const first = candidates[0];
+  if (first === void 0) return void 0;
+  const signature = first.match(/(?:^|[.:])([A-Za-z_$][A-Za-z0-9_$]*)\s*\(/);
+  if (signature?.[1] !== void 0) return signature[1];
+  const qualified = first.match(/(?:::\s*|\.)([A-Za-z_$][A-Za-z0-9_$]*)$/);
+  return qualified?.[1] ?? first;
+}
 function matchIndexFile(file2) {
   return file2.replace(/\\/g, "/").replace(/^\.\//, "");
 }
@@ -17059,11 +17067,26 @@ function relation(index, from, to) {
     via: index.strategyByPair.get(`${from}\0${to}`) || null
   };
 }
-function candidateTraceNodes(index, matches) {
+function uniqueRelations(relations) {
+  const seen = /* @__PURE__ */ new Set();
+  return relations.filter((entry) => {
+    const key = `${entry.id}\0${entry.line}\0${entry.via ?? ""}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+function candidateTraceNodes(index, matches, anchor) {
   const named = /* @__PURE__ */ new Set();
   for (const match of matches) {
     for (const node of index.nodesByFile.get(matchIndexFile(match.file)) ?? []) {
       if (index.symbols[node].name === match.pattern) named.add(node);
+    }
+  }
+  if (named.size > 0) return [...named];
+  if (anchor !== void 0) {
+    for (const [node, symbol2] of index.symbols.entries()) {
+      if (symbol2.name === anchor) named.add(node);
     }
   }
   if (named.size > 0) return [...named];
@@ -17076,17 +17099,17 @@ function candidateTraceNodes(index, matches) {
   }
   return [...containing];
 }
-function directTrace(index, matches) {
+function directTrace(index, matches, anchor) {
   const symbols = [];
-  for (const node of candidateTraceNodes(index, matches).slice(0, 3)) {
+  for (const node of candidateTraceNodes(index, matches, anchor).slice(0, 3)) {
     const symbol2 = index.symbols[node];
     symbols.push({
       id: symbol2.id,
       name: symbol2.name,
       file: symbol2.file,
       lines: [symbol2.startLine + 1, symbol2.endLine + 1],
-      callers: (index.callersOf.get(node) ?? []).slice(0, 12).map((caller) => relation(index, caller, node)),
-      callees: (index.calleesOf.get(node) ?? []).slice(0, 12).map((callee) => relation(index, node, callee))
+      callers: uniqueRelations((index.callersOf.get(node) ?? []).map((caller) => relation(index, caller, node))).slice(0, 12),
+      callees: uniqueRelations((index.calleesOf.get(node) ?? []).map((callee) => relation(index, node, callee))).slice(0, 12)
     });
   }
   return { symbols };
@@ -17101,7 +17124,7 @@ async function queryCodebase(root, index, options) {
   const startedAt = performance.now();
   const mode = options.mode ?? "explore";
   const candidates = buildCodebaseQueryPatterns(options.query);
-  const patterns = mode === "trace" ? candidates.slice(0, 1) : candidates;
+  const patterns = mode === "trace" ? [traceAnchor(candidates)].filter((pattern) => pattern !== void 0) : candidates;
   const exactStartedAt = performance.now();
   const exactPromise = patterns.length === 0 ? Promise.resolve([]) : (options.search ?? ((searchOptions) => instantGrepBatch(root, searchOptions)))(patterns.map((pattern) => ({
     pattern,
@@ -17134,7 +17157,7 @@ async function queryCodebase(root, index, options) {
   });
   const exactMatches = exact.flatMap((result) => result.matches.map((match) => ({ pattern: result.pattern, ...match })));
   const graphStartedAt = performance.now();
-  const trace = directTrace(index, exactMatches);
+  const trace = directTrace(index, exactMatches, patterns[0]);
   const graphMs = performance.now() - graphStartedAt;
   return {
     query: options.query,

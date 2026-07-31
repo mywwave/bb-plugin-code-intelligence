@@ -10,6 +10,9 @@ The current cross-language evidence suite is
 repositories (Go, Rust, C, C++, and Java), five read-only navigation questions,
 and five fresh repetitions in each arm. Its report and raw result data are
 [published](results/2026-07-31-agent-value-v2.md) beside the task contract.
+The Java host-snapshot glob regression discovered by that suite has its own
+[targeted A/B record](results/2026-07-31-java-glob-regression-v1.md); it does
+not replace the cross-language result.
 
 ## Controlled variables
 
