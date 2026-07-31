@@ -210,6 +210,13 @@ describe("resolveModulePath", () => {
   it("walks parent directories", () => {
     expect(resolveModulePath("src/deep/a.ts", "../util", known)).toBe("src/util.ts");
   });
+
+  it("resolves indexed local native modules without guessing package roots", () => {
+    expect(resolveModulePath("native/main.c", "./util.h", new Set(["native/util.h"]))).toBe("native/util.h");
+    expect(resolveModulePath("crate/lib.rs", "./util", new Set(["crate/util.rs"]))).toBe("crate/util.rs");
+    expect(resolveModulePath("svc/main.go", "fmt", new Set(["fmt.go"]))).toBeNull();
+    expect(resolveModulePath("app/Main.java", "com.example.Util", new Set(["app/Util.java"]))).toBeNull();
+  });
 });
 
 describe("resolveProject", () => {
