@@ -111,13 +111,29 @@ export function buildCodebaseQueryPatterns(query: string): readonly string[] {
  * local to trace mode; exploratory search deliberately retains its fuller
  * wording as independent evidence.
  */
-function traceAnchor(candidates: readonly string[]): string | undefined {
+interface TraceTarget {
+  readonly anchor: string;
+  /**
+   * The immediate owner from a qualified path, when the index represents the
+   * declaration as a method. It disambiguates ubiquitous names such as `new`
+   * without requiring source to spell the full package path.
+   */
+  readonly owner?: string;
+}
+
+function traceTarget(candidates: readonly string[]): TraceTarget | undefined {
   const first = candidates[0];
   if (first === undefined) return undefined;
   const signature = first.match(/(?:^|[.:])([A-Za-z_$][A-Za-z0-9_$]*)\s*\(/);
-  if (signature?.[1] !== undefined) return signature[1];
-  const qualified = first.match(/(?:::\s*|\.)([A-Za-z_$][A-Za-z0-9_$]*)$/);
-  return qualified?.[1] ?? first;
+  const qualifiedPath = first.match(/([A-Za-z_$][A-Za-z0-9_$]*(?:(?:::|\.)[A-Za-z_$][A-Za-z0-9_$]*)+)\s*(?:\(|$)/)?.[1];
+  if (qualifiedPath !== undefined) {
+    const parts = qualifiedPath.split(/::|\./);
+    const anchor = parts.at(-1);
+    const owner = parts.at(-2);
+    if (anchor !== undefined) return owner === undefined ? { anchor } : { anchor, owner };
+  }
+  if (signature?.[1] !== undefined) return { anchor: signature[1] };
+  return { anchor: first };
 }
 
 function matchIndexFile(file: string): string {
@@ -148,18 +164,39 @@ function uniqueRelations(relations: readonly CodebaseTraceRelation[]): readonly 
 function candidateTraceNodes(
   index: RetrievalIndex,
   matches: readonly CodebaseExactMatch[],
-  anchor: string | undefined,
+  target: TraceTarget | undefined,
 ): readonly number[] {
+  const anchor = target?.anchor;
+  const nameMatches = (node: number): boolean => anchor !== undefined && index.symbols[node]!.name === anchor;
+  const ownerMatches = (node: number): boolean => target?.owner !== undefined && index.symbols[node]!.container === target.owner;
   const named = new Set<number>();
   for (const match of matches) {
     for (const node of index.nodesByFile.get(matchIndexFile(match.file)) ?? []) {
       if (index.symbols[node]!.name === match.pattern) named.add(node);
     }
   }
+
+  // A path such as `anyhow::Error::new` cannot be searched literally: Rust
+  // declarations spell only `new`. Prefer the indexed method owner before
+  // falling back to name-only matching. Exact hits break a same-owner tie
+  // first; the whole symbol table is only a fallback for a bounded search
+  // page that did not include the declaration.
+  if (target?.owner !== undefined) {
+    const matchedOwned = [...named].filter((node) => nameMatches(node) && ownerMatches(node));
+    if (matchedOwned.length > 0) return matchedOwned;
+  }
   // A known identifier should prefer its declaration even when an import or a
   // caller happens to sort first in the exact-search results. Containing
   // symbols are only a fallback for identifiers that extraction cannot name.
   if (named.size > 0) return [...named];
+
+  if (target?.owner !== undefined) {
+    const owned = new Set<number>();
+    for (const node of index.symbols.keys()) {
+      if (nameMatches(node) && ownerMatches(node)) owned.add(node);
+    }
+    if (owned.size > 0) return [...owned];
+  }
 
   // The bounded exact search can fill with examples before a declaration in a
   // large repository. The trace anchor still names the declaration we need,
@@ -190,10 +227,10 @@ function candidateTraceNodes(
 function directTrace(
   index: RetrievalIndex,
   matches: readonly CodebaseExactMatch[],
-  anchor: string | undefined,
+  target: TraceTarget | undefined,
 ): CodebaseTraceResult {
   const symbols: CodebaseTraceSymbol[] = [];
-  for (const node of candidateTraceNodes(index, matches, anchor).slice(0, 3)) {
+  for (const node of candidateTraceNodes(index, matches, target).slice(0, 3)) {
     const symbol = index.symbols[node]!;
     symbols.push({
       id: symbol.id,
@@ -230,7 +267,8 @@ export async function queryCodebase(
   const candidates = buildCodebaseQueryPatterns(options.query);
   // A trace has one exact anchor. More patterns would recreate the fan-out this
   // mode exists to remove and would make its direct relation ambiguous.
-  const patterns = mode === "trace" ? [traceAnchor(candidates)].filter((pattern): pattern is string => pattern !== undefined) : candidates;
+  const target = mode === "trace" ? traceTarget(candidates) : undefined;
+  const patterns = target === undefined ? (mode === "trace" ? [] : candidates) : [target.anchor];
   const exactStartedAt = performance.now();
   const exactPromise = patterns.length === 0
     ? Promise.resolve([])
@@ -267,7 +305,7 @@ export async function queryCodebase(
   });
   const exactMatches = exact.flatMap((result) => result.matches.map((match) => ({ pattern: result.pattern, ...match })));
   const graphStartedAt = performance.now();
-  const trace = directTrace(index, exactMatches, patterns[0]);
+  const trace = directTrace(index, exactMatches, target);
   const graphMs = performance.now() - graphStartedAt;
   return {
     query: options.query,

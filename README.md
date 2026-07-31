@@ -96,33 +96,33 @@ that C preprocessor semantics or a compiler's type system are modelled.
 
 ## Evidence, not promises
 
-The current [cross-language A/B](bench/results/2026-07-31-agent-value-v3.md)
-ran 50 fresh, read-only BB threads: five predeclared navigation questions in
-five pinned public repositories (Go, Rust, C, C++, Java), five repetitions per
-arm. The provider/model, permission mode, BB version, and fixture commit were
-kept fixed.
+The latest [cross-language multi-hop A/B](bench/results/2026-07-31-agent-value-v4.md)
+ran 30 fresh, read-only BB threads: five predeclared navigation questions in
+five pinned public repositories (Go, Rust, C, C++, Java), three repetitions per
+arm. The provider/model, permission mode, BB version, fixture commit, and
+prompt were kept fixed. The enabled arm used the unpublished candidate revision
+documented in the report; it is not a claim about an already released package.
 
 | Measured result | Without plugin | With plugin | Change |
 | --- | ---: | ---: | ---: |
-| Correct final answers | `25 / 25` | `25 / 25` | preserved |
-| Native Code Intelligence calls | `0` | `35` | replaces shell discovery |
-| Shell discovery calls | `43` | `3` | **93.0% fewer** |
-| Total discovery operations | `43` | `38` | **11.6% fewer** |
-| Median full-turn time | `12.1 s` | `11.6 s` | within noise |
+| Correct final answers | `15 / 15` | `15 / 15` | preserved |
+| Native Code Intelligence calls | `0` | `27` | replaces shell discovery |
+| Shell discovery calls | `39` | `3` | **92.3% fewer** |
+| Total discovery operations | `39` | `30` | **23.1% fewer** |
+| Median observed full-turn event timeline | `18.0 s` | `27.1 s` | **50.7% higher** |
 
 So the demonstrated value is **structured native navigation without losing
-correctness**: on this fixed cross-language task set, the enabled arm made 40
-fewer shell-search calls and 5 fewer discovery operations. The pooled median
-full-turn time was 529 ms lower, but that gap reverses under other aggregations
-of the same runs, so it is reported as noise rather than a speed win. Read the
-[method and per-language results](bench/results/2026-07-31-agent-value-v3.md),
-[task contract](bench/tasks/agent-value-v2.json), and
-[raw rows](bench/results/2026-07-31-agent-value-v3.json) before drawing a
-broader conclusion. Individual task samples still vary, so these figures do
-not claim a universal speed improvement. The prior cross-language
-[v2 report](bench/results/2026-07-31-agent-value-v2.md) and earlier TypeScript
-[routing pilot](bench/results/2026-07-31-agent-routing-smoke-v1.md) remain as
-historical evidence.
+correctness**: on this fixed multi-hop task set, the enabled arm made 36 fewer
+shell-search calls and 9 fewer discovery operations. It was also slower in the
+observed event timeline, so this result is evidence for routing quality, not a
+speed claim. Read the [method and per-language results](bench/results/2026-07-31-agent-value-v4.md),
+[task contract](bench/tasks/agent-value-v4.json), and
+[raw rows](bench/results/2026-07-31-agent-value-v4.json) before drawing a
+broader conclusion. Individual task samples still vary, and event intervals
+are not CPU or causal-latency measurements. The prior cross-language
+[v3 report](bench/results/2026-07-31-agent-value-v3.md), [v2 report](bench/results/2026-07-31-agent-value-v2.md),
+and earlier TypeScript [routing pilot](bench/results/2026-07-31-agent-routing-smoke-v1.md)
+remain historical evidence.
 
 The earlier v2 A/B found a concrete Java host-snapshot incompatibility: a
 familiar `*.java` glob did not reach nested source directories. The fixed,
