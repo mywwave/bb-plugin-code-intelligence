@@ -38,7 +38,30 @@ function index() {
   }, () => "", 0.6, true);
 }
 
+function coreLanguageIndex() {
+  return buildIndex({
+    symbols: [
+      { id: "native/main.c#run", name: "run", kind: "function", container: null, file: "native/main.c", startLine: 0, endLine: 1, tokens: 1 },
+      { id: "native/main.cpp#run", name: "run", kind: "function", container: null, file: "native/main.cpp", startLine: 0, endLine: 1, tokens: 1 },
+      { id: "svc/main.go#Run", name: "Run", kind: "function", container: null, file: "svc/main.go", startLine: 0, endLine: 1, tokens: 1 },
+      { id: "app/Main.java#run", name: "run", kind: "method", container: "Main", file: "app/Main.java", startLine: 0, endLine: 1, tokens: 1 },
+      { id: "crate/lib.rs#run", name: "run", kind: "function", container: null, file: "crate/lib.rs", startLine: 0, endLine: 1, tokens: 1 },
+    ],
+    edges: [],
+    ambiguousCalls: 0,
+  }, () => "", 0.6, true);
+}
+
 describe("buildRepositoryContext", () => {
+  it("reports every indexed core language using graph extension coverage", async () => {
+    const root = await fixture({ "package.json": "{}" });
+
+    const context = await buildRepositoryContext(root, coreLanguageIndex());
+
+    expect(context.languages).toEqual({ c: 1, cpp: 1, go: 1, java: 1, rust: 1 });
+    expect(repositoryContextSummary(context)).toContain("languages: c,cpp,go,java,rust");
+  });
+
   it("discovers allowlisted npm checks and never includes secret file contents", async () => {
     const root = await fixture({
       "package.json": JSON.stringify({ scripts: { test: "vitest run", typecheck: "tsc --noEmit", lint: "eslint .", deploy: "./deploy.sh" } }),

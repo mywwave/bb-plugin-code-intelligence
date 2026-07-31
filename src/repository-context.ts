@@ -7,8 +7,9 @@
  */
 
 import { lstat, open } from "node:fs/promises";
-import { extname, join } from "node:path";
+import { join } from "node:path";
 
+import { languageForPath } from "./graph/languages.js";
 import type { RetrievalIndex } from "./retrieval.js";
 
 export type PackageManager = "npm" | "pnpm" | "yarn" | "bun" | "unknown";
@@ -66,18 +67,10 @@ function packageManager(manifests: readonly string[]): PackageManager {
 }
 
 function languageForFile(file: string): string | null {
-  switch (extname(file).toLowerCase()) {
-    case ".ts":
-    case ".tsx": return "typescript";
-    case ".js":
-    case ".jsx": return "javascript";
-    case ".py": return "python";
-    case ".go": return "go";
-    case ".rs": return "rust";
-    case ".java": return "java";
-    case ".rb": return "ruby";
-    default: return null;
-  }
+  const language = languageForPath(file);
+  // Repository summaries use the familiar top-level label, while parsing still
+  // retains a dedicated TSX grammar profile.
+  return language === "tsx" ? "typescript" : language;
 }
 
 function languagesIn(index: RetrievalIndex): Readonly<Record<string, number>> {

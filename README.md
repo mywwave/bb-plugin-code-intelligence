@@ -63,6 +63,28 @@ are read through BB's host-file API rather than a same-named server path.
 separate product. For an explicitly supplied server-local root, it uses
 ripgrep as the exact-search engine.
 
+## Language coverage
+
+The structural graph is deliberately syntax-first: it records declarations,
+call sites, and syntactic imports, then resolves only local targets that were
+actually indexed. It supports:
+
+| Source language | Extensions | Grammar asset | Conservative resolution boundary |
+| --- | --- | --- | --- |
+| TypeScript / TSX | `.ts`, `.mts`, `.cts`, `.tsx` | TypeScript / TSX | Relative modules only. |
+| JavaScript | `.js`, `.mjs`, `.cjs`, `.jsx` | JavaScript | Relative modules only. |
+| Python | `.py`, `.pyi` | Python | Relative modules only. |
+| Go | `.go` | Go | Imports are recorded; module/package roots are not guessed. |
+| Rust | `.rs` | Rust | Explicit local `mod` paths may resolve to indexed `.rs` files; crate roots are not guessed. |
+| C | `.c`, `.h` | bundled C++ grammar | A C-family baseline; quoted relative headers may resolve to indexed files. |
+| C++ | `.cc`, `.cp`, `.cpp`, `.cxx`, `.hpp`, `.hh`, `.hxx` | C++ | Quoted relative headers may resolve to indexed files. |
+| Java | `.java` | Java | Imports are recorded; classpaths and packages are not guessed. |
+
+The published WASM package has no separate C grammar. C therefore explicitly
+uses its version-matched C++ grammar asset, validated against the C-family
+fixture in the automated suite. This is a baseline parser choice, not a claim
+that C preprocessor semantics or a compiler's type system are modelled.
+
 ## Evidence, not promises
 
 The public [agent-routing A/B pilot](bench/results/2026-07-31-agent-routing-smoke-v1.md)
@@ -83,8 +105,8 @@ correctness in those tasks. It is **not** a general latency, cost, or quality
 claim: the pilot has three runs per task, one provider/model, and one public
 TypeScript repository. It does not claim to beat ripgrep.
 
-Release checks currently cover 163 automated tests. A fresh managed Git
-installation on BB `0.34.0` indexed this repository into `227` symbols and
+Run `npm test` for the current automated-suite total. A fresh managed Git
+installation of the current `0.1.0` stable release on BB `0.34.0` indexed this repository into `227` symbols and
 `2,296` edges with a reported completeness lower bound of `69.6%`; see the
 full [validation record](docs/VALIDATION.md) and [approach](docs/APPROACH.md).
 

@@ -2,6 +2,8 @@ import { access, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { TREE_SITTER_ASSETS } from "./tree-sitter-assets.js";
+
 const PLUGIN_ID = "code-intelligence";
 
 async function readJson(path) {
@@ -29,14 +31,7 @@ export async function validateReleaseArtifacts(root = process.cwd()) {
   for (const artifact of ["server.js"]) {
     await requireFile(resolve(dist, artifact));
   }
-  for (const asset of [
-    "tree-sitter.js",
-    "tree-sitter.wasm",
-    "tree-sitter-typescript.wasm",
-    "tree-sitter-tsx.wasm",
-    "tree-sitter-javascript.wasm",
-    "tree-sitter-python.wasm",
-  ]) {
+  for (const asset of TREE_SITTER_ASSETS) {
     await requireFile(resolve(dist, "tree-sitter", asset));
   }
 

@@ -30,6 +30,19 @@ engine used so callers can distinguish host-file snapshots from local scans.
 Native tool names are technical API identifiers. The product name is always
 Code Intelligence.
 
+## Language parsing and resolution
+
+The graph supports TypeScript/TSX, JavaScript, Python, Go, Rust, C, C++, and
+Java. Each extension selects a parser profile; the profile controls only
+syntax-level facts such as declarations, calls, imports, and direct declared
+types. C intentionally shares the version-matched bundled C++ grammar because
+the WASM package does not supply a distinct C asset.
+
+Resolution is stricter than parsing. Only a relative specifier whose candidate
+is already indexed can produce a module edge. Rust `mod` declarations and
+quoted C/C++ headers can use that rule; Go module paths and Java packages are
+recorded but never mapped to an invented repository path.
+
 ## Persistent state
 
 The plugin owns a SQLite database in its BB plugin data directory. It stores
@@ -40,6 +53,7 @@ fresh-install boundary and does not silently merge previous local state.
 ## Analysis limits
 
 The graph is static and partial by design. Dynamic dispatch, reflection,
-generated code, runtime registration, and unparsed language constructs can
+generated code, runtime registration, compiler/type-system semantics, and
+unparsed language constructs can
 hide dependencies. Tool results report these limits; a missing edge is not
 proof that no runtime dependency exists.
