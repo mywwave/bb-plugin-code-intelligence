@@ -351,6 +351,10 @@ function declaredTypeRelations(
       }
     }
   }
+  const interfaceExtends = child(node, "extends_type_clause");
+  if (interfaceExtends !== undefined) {
+    for (const supertype of children(interfaceExtends)) addList(supertype, "extends");
+  }
   for (const supertype of children(node)) {
     if (supertype.type === "superclass") add(supertype, "extends");
     if (["super_interfaces", "interfaces"].includes(supertype.type)) {

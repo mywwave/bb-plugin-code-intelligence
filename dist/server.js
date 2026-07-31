@@ -15423,6 +15423,10 @@ function declaredTypeRelations(node, language, file2, subtype) {
       }
     }
   }
+  const interfaceExtends = child(node, "extends_type_clause");
+  if (interfaceExtends !== void 0) {
+    for (const supertype of children(interfaceExtends)) addList(supertype, "extends");
+  }
   for (const supertype of children(node)) {
     if (supertype.type === "superclass") add(supertype, "extends");
     if (["super_interfaces", "interfaces"].includes(supertype.type)) {

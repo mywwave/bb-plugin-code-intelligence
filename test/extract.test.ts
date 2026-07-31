@@ -110,6 +110,7 @@ describe("extractFile", () => {
         "class Wrapped",
         "  extends Base",
         "  implements Reader<User> { read() {} }",
+        "interface ChildReader extends Reader<User>, Serializable {}",
       ].join("\n"),
     );
     const python = await extractFile(
@@ -132,6 +133,8 @@ describe("extractFile", () => {
       { file: "src/types.ts", subtype: "Generic", supertype: "Serializable", kind: "implements" },
       { file: "src/types.ts", subtype: "Wrapped", supertype: "Base", kind: "extends" },
       { file: "src/types.ts", subtype: "Wrapped", supertype: "Reader", kind: "implements" },
+      { file: "src/types.ts", subtype: "ChildReader", supertype: "Reader", kind: "extends" },
+      { file: "src/types.ts", subtype: "ChildReader", supertype: "Serializable", kind: "extends" },
     ]);
     expect(python.typeRelations).toEqual([
       { file: "pkg/types.py", subtype: "Child", supertype: "Base", kind: "extends" },
