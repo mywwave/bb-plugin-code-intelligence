@@ -10,7 +10,7 @@ const PRE_PUSH_CONTENT = `#!/usr/bin/env sh
 ${MARKER}
 # Git exports these to hooks. Clear them before spawning the test suite: its
 # temporary repositories must not inherit this worktree's index or git dir.
-unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
 exec npm run check
 `;
 

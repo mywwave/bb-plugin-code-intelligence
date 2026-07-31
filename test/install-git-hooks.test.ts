@@ -36,7 +36,7 @@ describe("install-git-hooks", () => {
       "# code-intelligence-managed-pre-push",
     );
     await expect(readFile(hook, "utf8")).resolves.toContain(
-      "unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE",
+      "unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR",
     );
   });
 
