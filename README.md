@@ -90,16 +90,21 @@ Static analysis cannot prove dynamic wiring: reflection, generated code,
 runtime dispatch, and unparsed languages remain explicit blind spots. The
 plugin does not intercept or prohibit arbitrary terminal searches.
 
-This repository is prepared for maintainer review, but no upstream BB issue or
-pull request has been opened yet. The proposed integration boundary is in the
+The proposed integration boundary is in the
 [maintainer proposal](docs/MAINTAINER_PROPOSAL.md).
 
 ## Development
 
 ```bash
 npm ci
-npm run verify:release
+npm run check
+# Optional: run the same gate before each push.
+npm run install-git-hooks
 ```
 
 `dist/` is the managed-install artifact. The plugin intentionally has no
 frontend bundle, panel, or settings UI.
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) for the full local development and
+pull-request workflow. The repository uses a manual local release gate rather
+than GitHub Actions.

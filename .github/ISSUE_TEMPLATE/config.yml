@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Support and questions
+    url: https://github.com/mywwave/bb-plugin-code-intelligence/blob/main/SUPPORT.md
+    about: Read the support policy before opening an issue.
+  - name: Security vulnerability
+    url: https://github.com/mywwave/bb-plugin-code-intelligence/security/advisories/new
+    about: Use Private Vulnerability Reporting instead of a public issue.

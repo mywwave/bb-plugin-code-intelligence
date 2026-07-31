@@ -1,0 +1,31 @@
+name: Question
+description: Ask for help with installation, configuration, or usage.
+title: "question: "
+labels: [question]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not post vulnerabilities, credentials, private repository paths, or user data.
+        Read SECURITY.md for private vulnerability reporting.
+  - type: input
+    id: bb-version
+    attributes:
+      label: BB version
+      placeholder: "0.34.0"
+    validations:
+      required: true
+  - type: input
+    id: plugin-version
+    attributes:
+      label: Plugin version or commit
+      placeholder: "0.1.0 or a7b75e1"
+    validations:
+      required: true
+  - type: textarea
+    id: question
+    attributes:
+      label: Question and context
+      description: Include the goal, what you tried, and safe command output.
+    validations:
+      required: true

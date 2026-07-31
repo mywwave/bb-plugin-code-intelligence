@@ -1,0 +1,45 @@
+name: Bug report
+description: Report a reproducible defect in Code Intelligence.
+title: "bug: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include credentials, private repository content, or vulnerabilities.
+        Read SECURITY.md for private vulnerability reporting.
+  - type: input
+    id: bb-version
+    attributes:
+      label: BB version
+      placeholder: "0.34.0"
+    validations:
+      required: true
+  - type: input
+    id: plugin-version
+    attributes:
+      label: Plugin version or commit
+      placeholder: "0.1.0 or a7b75e1"
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      placeholder: |
+        1. Install or update the plugin
+        2. Run ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual result
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment and safe logs
+      description: Include OS and non-sensitive logs only.
