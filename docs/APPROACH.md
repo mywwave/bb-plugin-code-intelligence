@@ -34,6 +34,7 @@ path structured, host-aware, and measurable.
 | Exploratory questions need entry points, not an unbounded semantic answer. | Combine exact-hit evidence with bounded graph ranking in `codebase_query`. | Keeps exploration grounded in repository files. |
 | A named-function delegation question normally causes two sequential calls. | Trace one exact anchor and direct indexed edges in `codebase_query` mode `trace`. | Keeps direct relation answers to one native call without implying graph completeness. |
 | A local server path can refer to the wrong checkout on multi-host BB. | Treat the active thread environment as authoritative and use BB host-file APIs for remote workspaces. | Prevents silent cross-workspace reads. |
+| A host file listing or file read can be incomplete. | Account for every successfully read enumerated path as indexed or policy-excluded, label a truncated listing in every absence-sensitive result, and fail closed on a read error. | Makes remote coverage limits actionable without falling back to a same-named local path or serving a transiently degraded snapshot. |
 | Static analysis is useful but incomplete. | Report graph completeness and dynamic boundaries with structural results. | A missing edge is not presented as proof of no runtime dependency. |
 | Agent tool use should be observed, not assumed. | Record per-surface feedback and follow-up search outcomes. | Lets maintainers measure whether routing reduces unnecessary discovery work. |
 

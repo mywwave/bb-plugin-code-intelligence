@@ -54,6 +54,12 @@ import { IndexRegistry, type IndexedRoot } from "./src/index-registry.js";
 import { readProjectPath } from "./src/project-path.js";
 import { parseContextArgs } from "./src/cli.js";
 import {
+  collectRemoteSources,
+  formatRemoteInventory,
+  remoteInventoryBlindSpots,
+  type RemoteInventory,
+} from "./src/remote-inventory.js";
+import {
   mergeCodeGraphConfig,
   normalizeCodeGraphConfig,
   type CodeGraphConfig,
@@ -109,6 +115,17 @@ const indexViewSchema = z.object({
   symbols: z.number().int(),
   indexedAtMs: z.number().int().nullable(),
   staleness: z.string().nullable(),
+  remoteInventory: z.object({
+    enumerated: z.number().int(),
+    indexed: z.number().int(),
+    truncated: z.boolean(),
+    skipped: z.object({
+      ignored: z.number().int(),
+      excluded: z.number().int(),
+      tooLarge: z.number().int(),
+      nonUtf8: z.number().int(),
+    }),
+  }).nullable(),
 });
 
 export const rpcContract = defineRpcContract({
@@ -194,6 +211,8 @@ export default async function plugin(bb: BbPluginApi) {
   const remoteSources = new Map<string, ReadonlyMap<string, string>>();
   /** Sorted and line-split alongside each remote snapshot for the search hot path. */
   const preparedRemoteSources = new Map<string, readonly PreparedInstantGrepSource[]>();
+  /** Last host-file inventory report for each remote workspace. */
+  const remoteInventories = new Map<string, RemoteInventory>();
 
   /** Every retrieval answer awaiting a per-surface outcome, keyed by thread. */
   const pending = new Map<string, PendingAnswer[]>();
@@ -201,6 +220,7 @@ export default async function plugin(bb: BbPluginApi) {
   interface RepositoryState {
     readonly sources: ReadonlyMap<string, string>;
     readonly fileHashes: ReadonlyMap<string, string>;
+    readonly remoteInventory?: RemoteInventory;
   }
 
   const throwIfAborted = (signal?: AbortSignal) => {
@@ -209,6 +229,12 @@ export default async function plugin(bb: BbPluginApi) {
 
   const rootLabel = (root: string): string => remoteWorkspaces.get(root)?.path ?? root;
   const isRemoteRoot = (root: string): boolean => remoteWorkspaces.has(root);
+  const inventoryLimits = (root: string): readonly string[] =>
+    remoteInventoryBlindSpots(remoteInventories.get(root));
+  const inventoryLimitField = (root: string): Record<string, readonly string[]> => {
+    const limits = inventoryLimits(root);
+    return limits.length === 0 ? {} : { inventoryLimits: limits };
+  };
 
   async function readRemoteRepositoryState(
     root: string,
@@ -224,7 +250,6 @@ export default async function plugin(bb: BbPluginApi) {
       limit: "10000",
       signal,
     });
-    if (listed.truncated) throw new Error(`remote workspace has more than 10000 paths: ${workspace.path}`);
     let ignored: Ignore | null = null;
     if (config.respectGitignore) {
       try {
@@ -239,37 +264,34 @@ export default async function plugin(bb: BbPluginApi) {
         // A missing or unreadable .gitignore leaves the permanent exclusions below.
       }
     }
-    const files = listed.paths
+    const paths = listed.paths
       .map((entry) => entry.path.replace(/^\.\//, ""))
-      .filter((file) => ignored === null || !ignored.ignores(file))
-      .filter((file) => !file.split("/").some((part) =>
+    const collection = await collectRemoteSources({
+      paths,
+      truncated: listed.truncated,
+      isIgnored: (file) => ignored !== null && ignored.ignores(file),
+      isExcluded: (file) => file.split("/").some((part) =>
         part.startsWith(".") ||
         ["node_modules", "dist", "build", "out", "target", "vendor", "venv", "__pycache__", "coverage"].includes(part),
-      ))
-      .sort((left, right) => left.localeCompare(right));
-    const sources = new Map<string, string>();
-    const fileHashes = new Map<string, string>();
-    let cursor = 0;
-    const readNext = async () => {
-      while (true) {
+      ),
+      throwIfAborted: () => throwIfAborted(signal),
+      read: async (file) => {
         throwIfAborted(signal);
-        const file = files[cursor++];
-        if (file === undefined) return;
-        const content = await bb.sdk.projects.fileContent({
+        return bb.sdk.projects.fileContent({
           projectId: workspace.projectId,
           environmentId: workspace.environmentId,
           path: file,
           signal,
         });
-        if (content.contentEncoding !== "utf8" || content.sizeBytes > 512 * 1024) continue;
-        sources.set(file, content.content);
-        fileHashes.set(file, hashContent(content.content));
-      }
-    };
-    await Promise.all(Array.from({ length: Math.min(16, files.length) }, readNext));
-    remoteSources.set(root, sources);
-    preparedRemoteSources.set(root, prepareInstantGrepSources(sources));
-    return { sources, fileHashes };
+      },
+    });
+    const fileHashes = new Map(
+      [...collection.sources].map(([file, source]) => [file, hashContent(source)]),
+    );
+    remoteSources.set(root, collection.sources);
+    preparedRemoteSources.set(root, prepareInstantGrepSources(collection.sources));
+    remoteInventories.set(root, collection.inventory);
+    return { sources: collection.sources, fileHashes, remoteInventory: collection.inventory };
   }
 
   async function readRepositoryState(
@@ -799,8 +821,8 @@ export default async function plugin(bb: BbPluginApi) {
             : "Use content mode on a selected file only when you need source lines.";
         return JSON.stringify(
           searchPatterns.length === 1
-            ? { engine: isRemoteRoot(root) ? "BB host-file snapshot" : "ripgrep", root: rootLabel(root), mode: regex ? "regex" : "literal", outputMode, ...results[0], next: next(results[0]!) }
-            : { engine: isRemoteRoot(root) ? "BB host-file snapshot" : "ripgrep", root: rootLabel(root), outputMode, results, next: "Each result is independent; answer from exact hits or narrow only the query that needs it." },
+            ? { engine: isRemoteRoot(root) ? "BB host-file snapshot" : "ripgrep", root: rootLabel(root), mode: regex ? "regex" : "literal", outputMode, ...results[0], ...inventoryLimitField(root), next: next(results[0]!) }
+            : { engine: isRemoteRoot(root) ? "BB host-file snapshot" : "ripgrep", root: rootLabel(root), outputMode, results, ...inventoryLimitField(root), next: "Each result is independent; answer from exact hits or narrow only the query that needs it." },
           null,
           2,
         );
@@ -887,6 +909,7 @@ export default async function plugin(bb: BbPluginApi) {
           graphCompleteness: ready.index.graphCompletenessReliable
             ? `>= ${(ready.index.graphCompleteness * 100).toFixed(0)}%`
             : "not estimable — too few edges were found by more than one strategy",
+          ...inventoryLimitField(ready.root),
           timingMs: { index: indexMs, ...result.timingMs },
           next: result.mode === "trace"
             ? trace?.symbols.length === 0
@@ -1065,6 +1088,7 @@ export default async function plugin(bb: BbPluginApi) {
             ? `>= ${(ready.index.graphCompleteness * 100).toFixed(0)}%`
             : "not estimable — too few edges were found by more than one strategy",
           ambiguousCalls: ready.index.ambiguousCalls,
+          ...inventoryLimitField(ready.root),
           note:
             "graphCompleteness is a lower bound from capture-recapture over resolution " +
             "strategies. Reflection, dynamic dispatch and DI containers are invisible to " +
@@ -1152,6 +1176,7 @@ export default async function plugin(bb: BbPluginApi) {
             ? `>= ${(ready.index.graphCompleteness * 100).toFixed(0)}% of call edges (lower bound)`
             : "not estimable — too few overlapping resolution strategies",
           ambiguousCalls: ready.index.ambiguousCalls,
+          ...inventoryLimitField(ready.root),
           note: "Direct static references only. Reflection, dynamic dispatch, DI, generated code, and unparsed languages are outside the graph.",
           next: report.ambiguous.length > 0
             ? "Choose an exact symbol id or source-file path, then call again."
@@ -1282,10 +1307,11 @@ export default async function plugin(bb: BbPluginApi) {
               : "not estimable — too few overlapping resolution strategies",
             ambiguousCalls: ready.index.ambiguousCalls,
             notProven: [
-            "A missing caller is inconclusive: reflection, dynamic dispatch, DI, generated code, and unparsed languages are outside the static graph.",
-            "Production imports are static dependency evidence, not proof that a target is called at runtime.",
+              "A missing caller is inconclusive: reflection, dynamic dispatch, DI, generated code, and unparsed languages are outside the static graph.",
+              "Production imports are static dependency evidence, not proof that a target is called at runtime.",
               "A test reference means the test calls or imports a target; it is evidence, not proof of behavioural coverage.",
               "Dynamic boundaries are detected inside target bodies only; they do not enumerate every runtime dispatch site in the repository.",
+              ...inventoryLimits(ready.root),
             ],
           },
           requiredReview: [
@@ -1361,6 +1387,7 @@ export default async function plugin(bb: BbPluginApi) {
             graphCompleteness: ready.index.graphCompletenessReliable
               ? `>= ${(ready.index.graphCompleteness * 100).toFixed(0)}% of call edges (lower bound)`
               : "not estimable — too few overlapping resolution strategies",
+            ...inventoryLimitField(ready.root),
             notProven: "Passing declared checks does not prove reflection, dynamic dispatch, DI, generated code, or unparsed languages are safe.",
           },
         }, null, 2);
@@ -1559,6 +1586,7 @@ export default async function plugin(bb: BbPluginApi) {
       symbols: entry?.index.symbols.length ?? snapshot?.symbols.length ?? 0,
       indexedAtMs: entry?.indexedAtMs ?? snapshot?.builtAtMs ?? null,
       staleness: root === null ? null : (staleness.get(root) ?? null),
+      remoteInventory: root === null ? null : (remoteInventories.get(root) ?? null),
     };
   }
 
@@ -1711,10 +1739,15 @@ export default async function plugin(bb: BbPluginApi) {
           .get() as { r: number | null };
         const all = indexes.list();
         const rows = all.map(
-          (entry) =>
-            `${entry.root}\n` +
-            `  symbols: ${entry.index.symbols.length}, edges: ${entry.edgeCount}, ` +
-            `completeness: >= ${(entry.index.graphCompleteness * 100).toFixed(1)}%`,
+          (entry) => {
+            const inventory = remoteInventories.get(entry.root);
+            return [
+              entry.root,
+              `  symbols: ${entry.index.symbols.length}, edges: ${entry.edgeCount}, ` +
+                `completeness: >= ${(entry.index.graphCompleteness * 100).toFixed(1)}%`,
+              ...(inventory === undefined ? [] : [`  ${formatRemoteInventory(inventory)}`]),
+            ].join("\n");
+          },
         );
         return {
           exitCode: 0,
@@ -1891,6 +1924,7 @@ export default async function plugin(bb: BbPluginApi) {
   bb.onDispose(() => {
     pending.clear();
     indexingRoots.clear();
+    remoteInventories.clear();
     indexes.clear();
   });
 }
