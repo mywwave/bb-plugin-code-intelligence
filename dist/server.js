@@ -16442,7 +16442,8 @@ function buildInstruction(summary, style = "playbook", repositorySummary) {
   const budget = callBudget(summary.symbols);
   const symbols = summary.symbols.toLocaleString("en-US");
   const short = [
-    `Unknown question \u2192 codebase_query; known literal or identifier \u2192 instant_grep.`,
+    `Unknown question \u2192 codebase_query; known literal/location \u2192 instant_grep.`,
+    `Known ID relation \u2192 codebase_query trace first, never instant_grep first.`,
     `instant_grep is primary exact search: literal by default, regex only when needed; answer locations from its hits.`,
     `No terminal rg/grep/find unless it errors or remains truncated after refinement.`,
     `Hit \u2192 symbol_lookup for definitions/references; code_graph_context once for structure.`,
@@ -16469,7 +16470,7 @@ function buildInstruction(summary, style = "playbook", repositorySummary) {
     `location or existence question, answer from those hits and do not call graph analysis.`,
     `If it truncates, refine the search or use \`nextOffset\` before drawing conclusions.`,
     `Do not run terminal \`rg\`, \`grep\`, or \`find\` for repository discovery while \`instant_grep\` is available.`,
-    `Use a targeted shell fallback only if this tool errors or remains truncated after refinement, and state why.`,
+    `Use a shell fallback only if this tool errors or stays truncated; state why.`,
     ``,
     `## Exploratory questions`,
     ``,
@@ -16477,6 +16478,8 @@ function buildInstruction(summary, style = "playbook", repositorySummary) {
     `identifier or file, call \`codebase_query\` first. It combines bounded exact evidence with`,
     `ranked entry points in one call. Give a short explanation of why this route fits; then choose`,
     `an exact hit or symbol before using structural analysis.`,
+    `Known direct relation \u2192 \`codebase_query\` \`mode: "trace"\` first, not \`instant_grep\`: exact source context`,
+    `plus direct static relations in one call; absence remains inconclusive.`,
     ``,
     `## Repository orientation`,
     ``,
@@ -16505,7 +16508,7 @@ function buildInstruction(summary, style = "playbook", repositorySummary) {
     `## Which shape to use`,
     ``,
     `- No foothold yet \u2014 use \`codebase_query\` once.`,
-    `- Known identifier, literal, import, or regex \u2014 use \`instant_grep\` first.`,
+    `- Known identifier relationship \u2014 \`codebase_query\` mode trace once; pure identifier, string, import, or regex \u2014 \`instant_grep\`.`,
     `- You have a symbol or file \u2014 call it with those as seeds; this is the path`,
     `  the benchmark measured, and it is the stronger one.`,
     `- You need exact definition/references after discovery \u2014 call \`symbol_lookup\`; it`,
@@ -16912,7 +16915,7 @@ async function instantGrep(root, options) {
 }
 function globMatches(path, glob) {
   if (glob === void 0) return true;
-  let expression = "^";
+  let expression = glob.includes("/") ? "^" : "^(?:.*/)?";
   for (let index = 0; index < glob.length; index++) {
     const character = glob[index];
     if (character === "*") {
@@ -16942,7 +16945,10 @@ function sourceMatcher(options) {
   const wordExpression = new RegExp(`\\b(?:${expression.source})\\b`, flags);
   return (line) => wordExpression.test(line);
 }
-async function instantGrepSources(sources, options) {
+function prepareInstantGrepSources(sources) {
+  return [...sources.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([file2, source]) => ({ file: file2, lines: source.split("\n") }));
+}
+async function instantGrepPreparedSources(sources, options) {
   validateOptions(options);
   const limit = normalizedLimit(options.limit);
   const offset = normalizedNonNegative(options.offset, "offset", 1e5);
@@ -16952,10 +16958,9 @@ async function instantGrepSources(sources, options) {
   const files = [];
   const counts = [];
   const candidates = [];
-  for (const [file2, source] of [...sources.entries()].sort(([left], [right]) => left.localeCompare(right))) {
+  for (const { file: file2, lines } of sources) {
     if (options.signal?.aborted) throw new Error("instant_grep aborted");
     if (!globMatches(file2, options.glob)) continue;
-    const lines = source.split("\n");
     const lineIndexes = lines.flatMap((line, index) => matchesLine(line) ? [index] : []);
     if (lineIndexes.length === 0) continue;
     if ((options.outputMode ?? "content") === "files_with_matches") {
@@ -17046,20 +17051,127 @@ function buildCodebaseQueryPatterns(query) {
   const natural = unique(tokenizeIdentifiers(withoutExplicit).filter((term) => !NATURAL_LANGUAGE_NOISE.has(term))).sort((left, right) => right.length - left.length);
   return [...explicit, ...natural].slice(0, MAX_PATTERNS);
 }
+function traceAnchor(candidates) {
+  const first = candidates[0];
+  if (first === void 0) return void 0;
+  const signature = first.match(/(?:^|[.:])([A-Za-z_$][A-Za-z0-9_$]*)\s*\(/);
+  if (signature?.[1] !== void 0) return signature[1];
+  const qualified = first.match(/(?:::\s*|\.)([A-Za-z_$][A-Za-z0-9_$]*)$/);
+  return qualified?.[1] ?? first;
+}
+function matchIndexFile(file2) {
+  return file2.replace(/\\/g, "/").replace(/^\.\//, "");
+}
+function relation(index, from, to) {
+  const symbol2 = index.symbols[to];
+  return {
+    id: symbol2.id,
+    name: symbol2.name,
+    file: symbol2.file,
+    line: symbol2.startLine + 1,
+    via: index.strategyByPair.get(`${from}\0${to}`) || null
+  };
+}
+function uniqueRelations(relations) {
+  const seen = /* @__PURE__ */ new Set();
+  return relations.filter((entry) => {
+    const key = `${entry.id}\0${entry.line}\0${entry.via ?? ""}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+function candidateTraceNodes(index, matches, anchor) {
+  const named = /* @__PURE__ */ new Set();
+  for (const match of matches) {
+    for (const node of index.nodesByFile.get(matchIndexFile(match.file)) ?? []) {
+      if (index.symbols[node].name === match.pattern) named.add(node);
+    }
+  }
+  if (named.size > 0) return [...named];
+  if (anchor !== void 0) {
+    for (const [node, symbol2] of index.symbols.entries()) {
+      if (symbol2.name === anchor) named.add(node);
+    }
+  }
+  if (named.size > 0) return [...named];
+  const containing = /* @__PURE__ */ new Set();
+  for (const match of matches) {
+    for (const node of index.nodesByFile.get(matchIndexFile(match.file)) ?? []) {
+      const symbol2 = index.symbols[node];
+      if (match.line >= symbol2.startLine + 1 && match.line <= symbol2.endLine + 1) containing.add(node);
+    }
+  }
+  return [...containing];
+}
+function directTrace(index, matches, anchor) {
+  const symbols = [];
+  for (const node of candidateTraceNodes(index, matches, anchor).slice(0, 3)) {
+    const symbol2 = index.symbols[node];
+    symbols.push({
+      id: symbol2.id,
+      name: symbol2.name,
+      file: symbol2.file,
+      lines: [symbol2.startLine + 1, symbol2.endLine + 1],
+      callers: uniqueRelations((index.callersOf.get(node) ?? []).map((caller) => relation(index, caller, node))).slice(0, 12),
+      callees: uniqueRelations((index.calleesOf.get(node) ?? []).map((callee) => relation(index, node, callee))).slice(0, 12)
+    });
+  }
+  return { symbols };
+}
+function traceEvidence(matches, trace) {
+  if (trace.symbols.length === 0) return matches;
+  return matches.filter((match) => trace.symbols.some(
+    (symbol2) => matchIndexFile(match.file) === symbol2.file && match.line >= symbol2.lines[0] && match.line <= symbol2.lines[1]
+  ));
+}
 async function queryCodebase(root, index, options) {
-  const patterns = buildCodebaseQueryPatterns(options.query);
-  const [exact, context] = await Promise.all([
-    patterns.length === 0 ? Promise.resolve([]) : (options.search ?? ((searchOptions) => instantGrepBatch(root, searchOptions)))(patterns.map((pattern) => ({
-      pattern,
-      caseSensitive: /[A-Z]/.test(pattern),
-      word: true,
-      limit: EXACT_LIMIT_PER_PATTERN,
-      signal: options.signal
-    }))),
-    Promise.resolve(retrieve(index, { question: options.query, budgetTokens: options.budgetTokens }))
-  ]);
+  const startedAt = performance.now();
+  const mode = options.mode ?? "explore";
+  const candidates = buildCodebaseQueryPatterns(options.query);
+  const patterns = mode === "trace" ? [traceAnchor(candidates)].filter((pattern) => pattern !== void 0) : candidates;
+  const exactStartedAt = performance.now();
+  const exactPromise = patterns.length === 0 ? Promise.resolve([]) : (options.search ?? ((searchOptions) => instantGrepBatch(root, searchOptions)))(patterns.map((pattern) => ({
+    pattern,
+    caseSensitive: /[A-Z]/.test(pattern),
+    word: true,
+    limit: EXACT_LIMIT_PER_PATTERN,
+    ...mode === "trace" ? { afterContext: 12 } : {},
+    signal: options.signal
+  })));
+  if (mode === "explore") {
+    const graphStartedAt2 = performance.now();
+    const context = retrieve(index, { question: options.query, budgetTokens: options.budgetTokens });
+    const graphMs2 = performance.now() - graphStartedAt2;
+    const exact2 = await exactPromise;
+    const exactSearchMs2 = performance.now() - exactStartedAt;
+    const exactMatches2 = exact2.flatMap((result) => result.matches.map((match) => ({ pattern: result.pattern, ...match })));
+    return {
+      query: options.query,
+      mode,
+      patterns,
+      exactMatches: exactMatches2,
+      context,
+      timingMs: { exactSearch: exactSearchMs2, graph: graphMs2, total: performance.now() - startedAt }
+    };
+  }
+  let exactSearchMs = 0;
+  const exact = await exactPromise.then((result) => {
+    exactSearchMs = performance.now() - exactStartedAt;
+    return result;
+  });
   const exactMatches = exact.flatMap((result) => result.matches.map((match) => ({ pattern: result.pattern, ...match })));
-  return { query: options.query, patterns, exactMatches, context };
+  const graphStartedAt = performance.now();
+  const trace = directTrace(index, exactMatches, patterns[0]);
+  const graphMs = performance.now() - graphStartedAt;
+  return {
+    query: options.query,
+    mode,
+    patterns,
+    exactMatches: traceEvidence(exactMatches, trace),
+    trace,
+    timingMs: { exactSearch: exactSearchMs, graph: graphMs, total: performance.now() - startedAt }
+  };
 }
 
 // src/repository-context.ts
@@ -18041,6 +18153,7 @@ async function plugin(bb) {
   const indexingRoots = /* @__PURE__ */ new Set();
   const remoteWorkspaces = /* @__PURE__ */ new Map();
   const remoteSources = /* @__PURE__ */ new Map();
+  const preparedRemoteSources = /* @__PURE__ */ new Map();
   const pending = /* @__PURE__ */ new Map();
   const throwIfAborted = (signal) => {
     if (signal?.aborted) throw new Error("indexing aborted");
@@ -18096,6 +18209,7 @@ async function plugin(bb) {
     };
     await Promise.all(Array.from({ length: Math.min(16, files.length) }, readNext));
     remoteSources.set(root, sources);
+    preparedRemoteSources.set(root, prepareInstantGrepSources(sources));
     return { sources, fileHashes };
   }
   async function readRepositoryState(root, signal) {
@@ -18339,10 +18453,11 @@ async function plugin(bb) {
   async function searchExact(root, options) {
     if (!isRemoteRoot(root)) return instantGrepBatch(root, options);
     const sources = remoteSources.get(root);
-    if (sources === void 0) throw new Error(`remote workspace is not indexed: ${rootLabel(root)}`);
+    const prepared = preparedRemoteSources.get(root);
+    if (sources === void 0 || prepared === void 0) throw new Error(`remote workspace is not indexed: ${rootLabel(root)}`);
     return Promise.all(options.map(async (option) => ({
       pattern: option.pattern,
-      ...await instantGrepSources(sources, option)
+      ...await instantGrepPreparedSources(prepared, option)
     })));
   }
   async function recordFeedbackAnswer(input) {
@@ -18415,8 +18530,8 @@ async function plugin(bb) {
   }
   bb.agents.registerTool({
     name: "instant_grep",
-    description: "Fast literal or regex search over the active workspace. It uses ripgrep for an explicit server-local root and a BB host-file snapshot for a thread environment. Use it first for exact symbols, error strings, imports, and regex patterns; it returns matching file/line locations without an LLM or graph-index lookup.",
-    instructions: "This is the primary code-search tool. Search exact identifiers, strings, imports, and regexes here before using structural analysis. Use `regex: true` for patterns such as `import.*PaymentService`, `word: true` for whole identifiers, and a glob to narrow large searches. Omit `root` unless the user explicitly supplies another workspace: the default is the active BB project, and remembered paths may be stale. Use `patterns` to batch independent queries with shared options. `content` returns exact lines plus optional context; `files_with_matches` and `count` are cheaper summaries. For a pure location answer, cite a content hit directly rather than opening the file. It stops at `limit`; use nextOffset or refine the pattern/glob before reading files.",
+    description: "Fast literal or regex search over the active workspace. It uses ripgrep for an explicit server-local root and a BB host-file snapshot for a thread environment. Use it first for exact locations, error strings, imports, and regex patterns; for a known identifier's direct caller/callee/delegation, use codebase_query mode trace first. It returns matching file/line locations without an LLM or graph-index lookup.",
+    instructions: "This is the primary exact-location search tool. For a known identifier's direct caller, callee, or delegation, do not call this first: call codebase_query with mode trace once instead. Search exact identifiers, strings, imports, and regexes here before using structural analysis. Use `regex: true` for patterns such as `import.*PaymentService`, `word: true` for whole identifiers, and a glob to narrow large searches. Omit `root` unless the user explicitly supplies another workspace: the default is the active BB project, and remembered paths may be stale. Use `patterns` to batch independent queries with shared options. `content` returns exact lines plus optional context; `files_with_matches` and `count` are cheaper summaries. For a pure location answer, cite a content hit directly rather than opening the file. It stops at `limit`; use nextOffset or refine the pattern/glob before reading files.",
     parameters: external_exports.object({
       pattern: external_exports.string().min(1).max(1e3).optional().describe("One literal text pattern by default, or a regex when regex is true."),
       patterns: external_exports.array(external_exports.string().min(1).max(1e3)).min(1).max(10).optional().describe("Independent patterns with the same search options; use instead of pattern to save tool calls."),
@@ -18491,14 +18606,15 @@ async function plugin(bb) {
   bb.agents.registerTool({
     name: "codebase_query",
     description: "Explore a codebase from a natural-language question in one bounded call. It combines a few deterministic exact workspace searches with graph-ranked symbols; no LLM runs inside it.",
-    instructions: "Use this as the first tool for an exploratory question when you do not yet know an exact identifier or file. It returns exact hits plus ranked entry points. For a known identifier, use instant_grep instead; after choosing an exact target, use symbol_lookup or code_graph_context.",
+    instructions: "Use this as the first tool for an exploratory question when you do not yet know an exact identifier or file. It returns exact hits plus ranked entry points. For a known identifier and only its direct caller, callee, or delegation, use mode trace first without instant_grep: one call returns its exact source context and direct static relations. For a pure location or literal question, use instant_grep instead.",
     parameters: external_exports.object({
       query: external_exports.string().min(3).max(1e3).describe("Natural-language question about the codebase. Include an identifier in backticks when you know one."),
-      explanation: external_exports.string().min(8).max(300).describe("Why this is an exploratory question rather than an exact identifier or regex search."),
+      explanation: external_exports.string().min(8).max(300).describe("Why this bounded exploration or direct-relation trace fits the question."),
+      mode: external_exports.enum(["explore", "trace"]).optional().describe("Use trace only for a known identifier's direct caller, callee, or delegation; otherwise omit for exploratory ranking."),
       budgetTokens: external_exports.number().int().min(256).max(32e3).optional().describe("Graph-context budget. Omit to use the plugin setting."),
       root: external_exports.string().optional().describe("Explicit server-local root. Omit to use the current thread workspace, including a remote environment.")
     }),
-    async execute({ query, explanation, budgetTokens, root: requestedRoot }, { threadId, projectId, signal }) {
+    async execute({ query, explanation, mode, budgetTokens, root: requestedRoot }, { threadId, projectId, signal }) {
       const root = await resolveRoot(projectId ?? null, requestedRoot ?? null, threadId, signal);
       if (root === null) {
         return {
@@ -18507,14 +18623,19 @@ async function plugin(bb) {
         };
       }
       try {
+        const indexStartedAt = performance.now();
         const ready = await ensureIndex(root, signal);
+        const indexMs = performance.now() - indexStartedAt;
         const effectiveBudget = budgetTokens ?? Math.min(config2.defaultBudgetTokens, 1024);
         const result = await queryCodebase(ready.root, ready.index, {
           query,
+          mode,
           budgetTokens: effectiveBudget,
           signal,
           search: (options) => searchExact(ready.root, options)
         });
+        const context = result.context;
+        const trace = result.trace;
         if (typeof threadId === "string") {
           await recordFeedbackAnswer({
             threadId,
@@ -18524,10 +18645,11 @@ async function plugin(bb) {
             budgetTokens: effectiveBudget,
             returnedFiles: [.../* @__PURE__ */ new Set([
               ...result.exactMatches.map((match) => match.file),
-              ...result.context.files
+              ...context?.files ?? [],
+              ...trace?.symbols.map((symbol2) => symbol2.file) ?? []
             ])],
-            returnedSymbols: result.context.symbols.map((symbol2) => symbol2.id),
-            tokensUsed: result.context.tokensUsed
+            returnedSymbols: context?.symbols.map((symbol2) => symbol2.id) ?? trace?.symbols.map((symbol2) => symbol2.id) ?? [],
+            tokensUsed: context?.tokensUsed ?? 0
           });
         }
         return JSON.stringify({
@@ -18535,17 +18657,20 @@ async function plugin(bb) {
           root: rootLabel(ready.root),
           query: result.query,
           intent: explanation,
+          mode: result.mode,
           patterns: result.patterns,
           exactHits: result.exactMatches.slice(0, 12),
-          symbols: result.context.symbols.slice(0, 12).map((symbol2) => ({
+          ...context === void 0 ? {} : { symbols: context.symbols.slice(0, 12).map((symbol2) => ({
             id: symbol2.id,
             file: symbol2.file,
             lines: [symbol2.startLine + 1, symbol2.endLine + 1],
             via: symbol2.via
-          })),
-          graphFiles: result.context.files.slice(0, 12),
+          })) },
+          ...context === void 0 ? {} : { graphFiles: context.files.slice(0, 12) },
+          ...trace === void 0 ? {} : { trace: trace.symbols },
           graphCompleteness: ready.index.graphCompletenessReliable ? `>= ${(ready.index.graphCompleteness * 100).toFixed(0)}%` : "not estimable \u2014 too few edges were found by more than one strategy",
-          next: "Choose an exact hit or symbol from this response. Use instant_grep for a narrower exact follow-up, then symbol_lookup or code_graph_context for structure."
+          timingMs: { index: indexMs, ...result.timingMs },
+          next: result.mode === "trace" ? trace?.symbols.length === 0 ? "No indexed definition enclosed an exact hit. Refine the identifier or use instant_grep; an empty trace is not proof of no relation." : "The exact definition and direct relation above answer this trace. Answer now; do not call instant_grep or code_graph_context unless the user asks for source beyond this result or a wider structure." : "Choose an exact hit or symbol from this response. Use instant_grep for a narrower exact follow-up, then symbol_lookup or code_graph_context for structure."
         }, null, 2);
       } catch (error51) {
         return {

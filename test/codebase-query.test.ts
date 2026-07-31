@@ -45,6 +45,39 @@ describe("codebase query", () => {
     ]);
   });
 
+  it("reduces a qualified method signature to its callable identifier for a direct trace", async () => {
+    const root = await fixture({
+      "a/example.java": Array.from({ length: 9 }, () => "new Gson().fromJson(\"{}\", String.class);").join("\n"),
+      "src/gson.java": "class Gson { void fromJson(String json, Class type) { delegate(); } }\n",
+    });
+    const fromJson = symbol("src/gson.java#fromJson", "fromJson", "src/gson.java", "fromJson delegates");
+    const delegate = symbol("src/gson.java#delegate", "delegate", "src/gson.java", "delegate parses");
+    const bodies = new Map([[fromJson.id, fromJson.body], [delegate.id, delegate.body]]);
+    const index = buildIndex({
+      symbols: [fromJson, delegate],
+      edges: [
+        { from: fromJson.id, to: delegate.id, weight: 1, strategy: "uniqueName" },
+        { from: fromJson.id, to: delegate.id, weight: 1, strategy: "uniqueName" },
+      ],
+      ambiguousCalls: 0,
+    } satisfies IndexInput, (entry) => bodies.get(entry.id) ?? "", 0.8, true);
+
+    const result = await queryCodebase(root, index, {
+      query: "Trace `Gson.fromJson(String, Class)` and its direct delegation.",
+      mode: "trace",
+      budgetTokens: 160,
+    });
+
+    expect(result.patterns).toEqual(["fromJson"]);
+    expect(result.trace?.symbols).toEqual([
+      expect.objectContaining({
+        id: fromJson.id,
+        callees: [expect.objectContaining({ id: delegate.id })],
+      }),
+    ]);
+    expect(result.exactMatches.every((match) => match.file === "./src/gson.java")).toBe(true);
+  });
+
   it("returns both exact disk hits and graph-ranked entry points", async () => {
     const root = await fixture({
       "src/payment/error.ts": "export class PaymentFailedError extends Error {}\n",
@@ -65,7 +98,66 @@ describe("codebase query", () => {
 
     expect(result.patterns).toEqual(["PaymentFailedError", "payment", "service"]);
     expect(result.exactMatches.some((match) => match.file === "./src/payment/handler.ts")).toBe(true);
-    expect(result.context.files).toContain("src/payment/handler.ts");
-    expect(result.context.files.some((file) => file.includes("filler"))).toBe(false);
+    expect(result.context?.files).toContain("src/payment/handler.ts");
+    expect(result.context?.files.some((file) => file.includes("filler"))).toBe(false);
+  });
+
+  it("traces an exact definition and direct callee in one bounded query", async () => {
+    const root = await fixture({
+      "a/entry.ts": "export function entry() { return Decode(); }\n",
+      "src/decode.ts": [
+        "export function Decode() {",
+        "  return NewDecoder();",
+        "}",
+        "export function NewDecoder() { return {}; }",
+      ].join("\n"),
+    });
+    const entry = {
+      ...symbol("a/entry.ts#entry", "entry", "a/entry.ts", "entry calls Decode"),
+      startLine: 0,
+      endLine: 0,
+    };
+    const decode = {
+      ...symbol("src/decode.ts#Decode", "Decode", "src/decode.ts", "Decode returns NewDecoder"),
+      startLine: 0,
+      endLine: 2,
+    };
+    const newDecoder = {
+      ...symbol("src/decode.ts#NewDecoder", "NewDecoder", "src/decode.ts", "NewDecoder creates a decoder"),
+      startLine: 3,
+      endLine: 3,
+    };
+    const symbols = [entry, decode, newDecoder];
+    const bodies = new Map(symbols.map((entry) => [entry.id, entry.body]));
+    const index = buildIndex({
+      symbols,
+      edges: [
+        { from: entry.id, to: decode.id, weight: 1, strategy: "uniqueName" },
+        { from: decode.id, to: newDecoder.id, weight: 1, strategy: "uniqueName" },
+      ],
+      ambiguousCalls: 0,
+    } satisfies IndexInput, (entry) => bodies.get(entry.id) ?? "", 0.8, true);
+
+    const result = await queryCodebase(root, index, {
+      query: "Where does `Decode` delegate?",
+      mode: "trace",
+      budgetTokens: 160,
+    });
+
+    expect(result.mode).toBe("trace");
+    expect(result.context).toBeUndefined();
+    expect(result.patterns).toEqual(["Decode"]);
+    expect(result.exactMatches[0]?.after).toEqual([
+      expect.objectContaining({ line: 2, text: "  return NewDecoder();" }),
+      expect.objectContaining({ line: 3, text: "}" }),
+      expect.objectContaining({ line: 4, text: "export function NewDecoder() { return {}; }" }),
+    ]);
+    expect(result.trace?.symbols).toEqual([
+      expect.objectContaining({
+        id: decode.id,
+        callees: [expect.objectContaining({ id: newDecoder.id, via: "uniqueName" })],
+      }),
+    ]);
+    expect(result.timingMs.total).toBeGreaterThanOrEqual(0);
   });
 });

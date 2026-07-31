@@ -32,7 +32,13 @@ import {
 } from "./src/retrieval.js";
 import { buildInstruction } from "./src/instruction.js";
 import { analyzeImpact } from "./src/impact.js";
-import { instantGrepBatch, instantGrepSources, type InstantGrepOptions } from "./src/instant-grep.js";
+import {
+  instantGrepBatch,
+  instantGrepPreparedSources,
+  prepareInstantGrepSources,
+  type InstantGrepOptions,
+  type PreparedInstantGrepSource,
+} from "./src/instant-grep.js";
 import { queryCodebase } from "./src/codebase-query.js";
 import {
   buildRepositoryContext,
@@ -185,6 +191,8 @@ export default async function plugin(bb: BbPluginApi) {
   }>();
   /** Last complete host-file snapshot for a remote workspace. */
   const remoteSources = new Map<string, ReadonlyMap<string, string>>();
+  /** Sorted and line-split alongside each remote snapshot for the search hot path. */
+  const preparedRemoteSources = new Map<string, readonly PreparedInstantGrepSource[]>();
 
   /** Every retrieval answer awaiting a per-surface outcome, keyed by thread. */
   const pending = new Map<string, PendingAnswer[]>();
@@ -259,6 +267,7 @@ export default async function plugin(bb: BbPluginApi) {
     };
     await Promise.all(Array.from({ length: Math.min(16, files.length) }, readNext));
     remoteSources.set(root, sources);
+    preparedRemoteSources.set(root, prepareInstantGrepSources(sources));
     return { sources, fileHashes };
   }
 
@@ -605,10 +614,11 @@ export default async function plugin(bb: BbPluginApi) {
     // Keeping the fallback explicit gives an actionable failure rather than
     // accidentally running ripgrep against the BB server's similarly named path.
     const sources = remoteSources.get(root);
-    if (sources === undefined) throw new Error(`remote workspace is not indexed: ${rootLabel(root)}`);
+    const prepared = preparedRemoteSources.get(root);
+    if (sources === undefined || prepared === undefined) throw new Error(`remote workspace is not indexed: ${rootLabel(root)}`);
     return Promise.all(options.map(async (option) => ({
       pattern: option.pattern,
-      ...(await instantGrepSources(sources, option)),
+      ...(await instantGrepPreparedSources(prepared, option)),
     })));
   }
 
@@ -709,10 +719,13 @@ export default async function plugin(bb: BbPluginApi) {
     description:
       "Fast literal or regex search over the active workspace. It uses ripgrep for an explicit " +
       "server-local root and a BB host-file snapshot for a thread environment. " +
-      "Use it first for exact symbols, error strings, imports, and regex patterns; it " +
+      "Use it first for exact locations, error strings, imports, and regex patterns; for a known " +
+      "identifier's direct caller/callee/delegation, use codebase_query mode trace first. It " +
       "returns matching file/line locations without an LLM or graph-index lookup.",
     instructions:
-      "This is the primary code-search tool. Search exact identifiers, strings, imports, " +
+      "This is the primary exact-location search tool. For a known identifier's direct caller, callee, " +
+      "or delegation, do not call this first: call codebase_query with mode trace once instead. Search " +
+      "exact identifiers, strings, imports, " +
       "and regexes here before using structural analysis. Use `regex: true` for patterns " +
       "such as `import.*PaymentService`, `word: true` for whole identifiers, and a glob " +
       "to narrow large searches. Omit `root` unless the user explicitly supplies another " +
@@ -806,15 +819,17 @@ export default async function plugin(bb: BbPluginApi) {
       "a few deterministic exact workspace searches with graph-ranked symbols; no LLM runs inside it.",
     instructions:
       "Use this as the first tool for an exploratory question when you do not yet know an exact " +
-      "identifier or file. It returns exact hits plus ranked entry points. For a known identifier, " +
-      "use instant_grep instead; after choosing an exact target, use symbol_lookup or code_graph_context.",
+      "identifier or file. It returns exact hits plus ranked entry points. For a known identifier and " +
+      "only its direct caller, callee, or delegation, use mode trace first without instant_grep: one call returns its exact source " +
+      "context and direct static relations. For a pure location or literal question, use instant_grep instead.",
     parameters: z.object({
       query: z.string().min(3).max(1_000).describe("Natural-language question about the codebase. Include an identifier in backticks when you know one."),
-      explanation: z.string().min(8).max(300).describe("Why this is an exploratory question rather than an exact identifier or regex search."),
+      explanation: z.string().min(8).max(300).describe("Why this bounded exploration or direct-relation trace fits the question."),
+      mode: z.enum(["explore", "trace"]).optional().describe("Use trace only for a known identifier's direct caller, callee, or delegation; otherwise omit for exploratory ranking."),
       budgetTokens: z.number().int().min(256).max(32_000).optional().describe("Graph-context budget. Omit to use the plugin setting."),
       root: z.string().optional().describe("Explicit server-local root. Omit to use the current thread workspace, including a remote environment."),
     }),
-    async execute({ query, explanation, budgetTokens, root: requestedRoot }, { threadId, projectId, signal }) {
+    async execute({ query, explanation, mode, budgetTokens, root: requestedRoot }, { threadId, projectId, signal }) {
       const root = await resolveRoot(projectId ?? null, requestedRoot ?? null, threadId, signal);
       if (root === null) {
         return {
@@ -823,14 +838,19 @@ export default async function plugin(bb: BbPluginApi) {
         };
       }
       try {
+        const indexStartedAt = performance.now();
         const ready = await ensureIndex(root, signal);
+        const indexMs = performance.now() - indexStartedAt;
         const effectiveBudget = budgetTokens ?? Math.min(config.defaultBudgetTokens, 1_024);
         const result = await queryCodebase(ready.root, ready.index, {
           query,
+          mode,
           budgetTokens: effectiveBudget,
           signal,
           search: (options) => searchExact(ready.root, options),
         });
+        const context = result.context;
+        const trace = result.trace;
         if (typeof threadId === "string") {
           await recordFeedbackAnswer({
             threadId,
@@ -840,10 +860,11 @@ export default async function plugin(bb: BbPluginApi) {
             budgetTokens: effectiveBudget,
             returnedFiles: [...new Set([
               ...result.exactMatches.map((match) => match.file),
-              ...result.context.files,
+              ...(context?.files ?? []),
+              ...(trace?.symbols.map((symbol) => symbol.file) ?? []),
             ])],
-            returnedSymbols: result.context.symbols.map((symbol) => symbol.id),
-            tokensUsed: result.context.tokensUsed,
+            returnedSymbols: context?.symbols.map((symbol) => symbol.id) ?? trace?.symbols.map((symbol) => symbol.id) ?? [],
+            tokensUsed: context?.tokensUsed ?? 0,
           });
         }
         return JSON.stringify({
@@ -851,19 +872,26 @@ export default async function plugin(bb: BbPluginApi) {
           root: rootLabel(ready.root),
           query: result.query,
           intent: explanation,
+          mode: result.mode,
           patterns: result.patterns,
           exactHits: result.exactMatches.slice(0, 12),
-          symbols: result.context.symbols.slice(0, 12).map((symbol) => ({
+          ...(context === undefined ? {} : { symbols: context.symbols.slice(0, 12).map((symbol) => ({
             id: symbol.id,
             file: symbol.file,
             lines: [symbol.startLine + 1, symbol.endLine + 1],
             via: symbol.via,
-          })),
-          graphFiles: result.context.files.slice(0, 12),
+          })) }),
+          ...(context === undefined ? {} : { graphFiles: context.files.slice(0, 12) }),
+          ...(trace === undefined ? {} : { trace: trace.symbols }),
           graphCompleteness: ready.index.graphCompletenessReliable
             ? `>= ${(ready.index.graphCompleteness * 100).toFixed(0)}%`
             : "not estimable — too few edges were found by more than one strategy",
-          next: "Choose an exact hit or symbol from this response. Use instant_grep for a narrower exact follow-up, then symbol_lookup or code_graph_context for structure.",
+          timingMs: { index: indexMs, ...result.timingMs },
+          next: result.mode === "trace"
+            ? trace?.symbols.length === 0
+              ? "No indexed definition enclosed an exact hit. Refine the identifier or use instant_grep; an empty trace is not proof of no relation."
+              : "The exact definition and direct relation above answer this trace. Answer now; do not call instant_grep or code_graph_context unless the user asks for source beyond this result or a wider structure."
+            : "Choose an exact hit or symbol from this response. Use instant_grep for a narrower exact follow-up, then symbol_lookup or code_graph_context for structure.",
         }, null, 2);
       } catch (error) {
         return {

@@ -1,0 +1,27 @@
+{
+  "suite": "java-glob-regression-v1",
+  "collectedAt": "2026-07-31",
+  "contract": "../tasks/agent-value-v2.json#java-from-json-delegation",
+  "scope": "Targeted post-fix regression check for recursive basename glob behavior in a BB host-file snapshot. It is not a replacement for the cross-language A/B suite.",
+  "environment": {
+    "bbVersion": "0.34.0",
+    "provider": "codex",
+    "model": "gpt-5.6-sol",
+    "reasoningLevel": "low",
+    "permissionMode": "full",
+    "fixture": "https://github.com/google/gson",
+    "fixtureCommit": "0482d5cadc7e9018d3b4ccb3145f62c2fba2f9bd"
+  },
+  "runs": [
+    { "taskId": "java-from-json-delegation", "arm": "baseline_without_plugin", "repetition": 1, "threadId": "thr_dsa5nvtzmn", "status": "completed", "correct": true, "wallTimeMs": 11745, "completedDiscoveryOperations": 1, "nativePluginCalls": 0, "shellSearchCalls": 1, "finalAnswerPresent": true, "runnerElapsedMs": 14037 },
+    { "taskId": "java-from-json-delegation", "arm": "baseline_without_plugin", "repetition": 2, "threadId": "thr_bpw75nw9gb", "status": "completed", "correct": true, "wallTimeMs": 10730, "completedDiscoveryOperations": 1, "nativePluginCalls": 0, "shellSearchCalls": 1, "finalAnswerPresent": true, "runnerElapsedMs": 12279 },
+    { "taskId": "java-from-json-delegation", "arm": "baseline_without_plugin", "repetition": 3, "threadId": "thr_tugs4uqm5q", "status": "completed", "correct": true, "wallTimeMs": 11745, "completedDiscoveryOperations": 2, "nativePluginCalls": 0, "shellSearchCalls": 2, "finalAnswerPresent": true, "runnerElapsedMs": 13633 },
+    { "taskId": "java-from-json-delegation", "arm": "baseline_without_plugin", "repetition": 4, "threadId": "thr_zfyekfpbst", "status": "completed", "correct": true, "wallTimeMs": 16386, "completedDiscoveryOperations": 2, "nativePluginCalls": 0, "shellSearchCalls": 2, "finalAnswerPresent": true, "runnerElapsedMs": 18002 },
+    { "taskId": "java-from-json-delegation", "arm": "baseline_without_plugin", "repetition": 5, "threadId": "thr_d46ugmq62r", "status": "completed", "correct": true, "wallTimeMs": 14184, "completedDiscoveryOperations": 2, "nativePluginCalls": 0, "shellSearchCalls": 2, "finalAnswerPresent": true, "runnerElapsedMs": 16112 },
+    { "taskId": "java-from-json-delegation", "arm": "plugin_enabled", "repetition": 1, "threadId": "thr_sgewn9nqkv", "status": "completed", "correct": true, "wallTimeMs": 9924, "completedDiscoveryOperations": 1, "nativePluginCalls": 1, "shellSearchCalls": 0, "finalAnswerPresent": true, "runnerElapsedMs": 11693 },
+    { "taskId": "java-from-json-delegation", "arm": "plugin_enabled", "repetition": 2, "threadId": "thr_9igshgsbyc", "status": "completed", "correct": true, "wallTimeMs": 9223, "completedDiscoveryOperations": 1, "nativePluginCalls": 1, "shellSearchCalls": 0, "finalAnswerPresent": true, "runnerElapsedMs": 10835 },
+    { "taskId": "java-from-json-delegation", "arm": "plugin_enabled", "repetition": 3, "threadId": "thr_zwyafdcdyt", "status": "completed", "correct": true, "wallTimeMs": 8536, "completedDiscoveryOperations": 1, "nativePluginCalls": 1, "shellSearchCalls": 0, "finalAnswerPresent": true, "runnerElapsedMs": 10297 },
+    { "taskId": "java-from-json-delegation", "arm": "plugin_enabled", "repetition": 4, "threadId": "thr_by72q9nv54", "status": "completed", "correct": true, "wallTimeMs": 8240, "completedDiscoveryOperations": 1, "nativePluginCalls": 1, "shellSearchCalls": 0, "finalAnswerPresent": true, "runnerElapsedMs": 10058 },
+    { "taskId": "java-from-json-delegation", "arm": "plugin_enabled", "repetition": 5, "threadId": "thr_tff2wvfhjb", "status": "completed", "correct": true, "wallTimeMs": 16622, "completedDiscoveryOperations": 2, "nativePluginCalls": 2, "shellSearchCalls": 0, "finalAnswerPresent": true, "runnerElapsedMs": 18247 }
+  ]
+}

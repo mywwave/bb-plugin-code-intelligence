@@ -4,7 +4,15 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { buildInstantGrepArgs, instantGrep, instantGrepBatch, instantGrepSources, normalizeInstantGrepFile } from "../src/instant-grep.js";
+import {
+  buildInstantGrepArgs,
+  instantGrep,
+  instantGrepBatch,
+  instantGrepPreparedSources,
+  instantGrepSources,
+  normalizeInstantGrepFile,
+  prepareInstantGrepSources,
+} from "../src/instant-grep.js";
 
 const temporaryRoots: string[] = [];
 
@@ -163,5 +171,39 @@ describe("instantGrep", () => {
       }],
       truncated: false,
     });
+  });
+
+  it("treats a basename glob as recursive, matching ripgrep semantics", async () => {
+    const sources = new Map([
+      ["src/main/java/App.java", "class App {}\n"],
+      ["examples/Example.java", "class Example {}\n"],
+      ["README.md", "class Documentation {}\n"],
+    ]);
+
+    const result = await instantGrepSources(sources, {
+      pattern: "class",
+      word: true,
+      glob: "*.java",
+      limit: 10,
+    });
+
+    expect(result.matches.map((match) => match.file)).toEqual([
+      "./examples/Example.java",
+      "./src/main/java/App.java",
+    ]);
+  });
+
+  it("reuses a prepared remote snapshot without changing the exact-search contract", async () => {
+    const sources = new Map([
+      ["z/second.ts", "const PaymentFailedError = true;\n"],
+      ["a/first.ts", "throw new PaymentFailedError();\n"],
+    ]);
+    const options = { pattern: "PaymentFailedError", word: true, limit: 10 } as const;
+
+    const prepared = prepareInstantGrepSources(sources);
+    expect(prepared.map((source) => source.file)).toEqual(["a/first.ts", "z/second.ts"]);
+    await expect(instantGrepPreparedSources(prepared, options)).resolves.toEqual(
+      await instantGrepSources(sources, options),
+    );
   });
 });

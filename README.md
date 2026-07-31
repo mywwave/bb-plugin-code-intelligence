@@ -52,6 +52,7 @@ unreleased commits may track the repository's `main` branch instead.
 | --- | --- | --- |
 | Known identifier, string, import, or regex | `instant_grep` | Exact file/line hits, glob filtering, context, and paging. |
 | “Where/how is this handled?” with no exact target | `codebase_query` | Bounded exploration: exact evidence plus ranked entry files. |
+| Known identifier, direct caller/callee/delegation | `codebase_query` with `mode: "trace"` | Exact source context and direct static relations in one call. |
 | Known symbol/file, need callers or tests | `symbol_lookup`, `code_graph_context` | Definitions, static relationships, tests, and stated graph limits. |
 | Before or after an implementation edit | `prechange_impact`, `verify_change` | Direct impact and declared verification checks. |
 
@@ -120,6 +121,20 @@ broader conclusion. The earlier TypeScript
 [routing pilot](bench/results/2026-07-31-agent-routing-smoke-v1.md) remains as
 historical evidence.
 
+That A/B also found a concrete Java host-snapshot incompatibility: a familiar
+`*.java` glob did not reach nested source directories. The fixed, targeted
+[Java regression A/B](bench/results/2026-07-31-java-glob-regression-v1.md)
+kept correctness at `5 / 5` while eliminating shell discovery calls
+(`8 → 0`, **100% fewer**), reducing total discovery operations (`8 → 6`,
+**25% fewer**), and reducing median full-turn time (`11.7 s → 9.2 s`,
+**21.5% lower**).
+
+The improvement comes from three concrete behavior fixes: basename globs such
+as `*.java` now search recursively like ripgrep; qualified method signatures
+are reduced to their declaration anchor for `trace`; and a trace prefers the
+indexed declaration when its first exact-hit page contains usage examples.
+This remains a one-task regression result, not an aggregate performance claim.
+
 Run `npm test` for the current automated-suite total. A fresh managed Git
 installation of the current `0.1.0` stable release on BB `0.34.0` indexed this repository into `227` symbols and
 `2,296` edges with a reported completeness lower bound of `69.6%`; see the
@@ -130,6 +145,9 @@ full [validation record](docs/VALIDATION.md) and [approach](docs/APPROACH.md).
 Static analysis cannot prove dynamic wiring: reflection, generated code,
 runtime dispatch, and unparsed languages remain explicit blind spots. The
 plugin does not intercept or prohibit arbitrary terminal searches.
+
+`trace` reports only direct edges found in the static index. An empty trace is
+not proof that a runtime relation does not exist.
 
 The proposed integration boundary is in the
 [maintainer proposal](docs/MAINTAINER_PROPOSAL.md).

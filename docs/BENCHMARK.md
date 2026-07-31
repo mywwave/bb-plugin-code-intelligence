@@ -37,7 +37,10 @@ entry-point recall, whether exact evidence is included, number of follow-up
 searches, and total tool-output bytes. Keep agent model, prompt, repository
 commit, and time budget fixed across arms. The agent-value-v2 contract records
 correctness, completed discovery operations, native-plugin calls,
-shell-search calls, and wall time from fresh threads.
+shell-search calls, and wall time from fresh threads. For `codebase_query`,
+also retain the returned plugin-only `timingMs` breakdown (`index`, exact
+search, graph work, total); it excludes model/provider latency and must not be
+combined with full-turn time.
 
 ## Reporting
 

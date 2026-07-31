@@ -12,10 +12,14 @@ output compact for agents while preserving an explicit path to deeper context.
 2. **Unknown location** — `codebase_query` starts bounded exploration and
    returns exact evidence plus ranked entry points instead of making the agent
    infer a broad shell command.
-3. **Known target, deeper question** — `symbol_lookup` and
+3. **Known direct relationship** — `codebase_query` with `mode: "trace"`
+   joins one exact identifier search to the index's direct callers/callees,
+   returning source context and relation evidence in one agent call. Its empty
+   result remains inconclusive around dynamic wiring.
+4. **Known target, deeper question** — `symbol_lookup` and
    `code_graph_context` resolve definitions, static callers, tests, and the
    graph's completeness limits.
-4. **Implementation change** — `prechange_impact` runs before an edit and
+5. **Implementation change** — `prechange_impact` runs before an edit and
    `verify_change` records scoped checks after it.
 
 The route is deliberately not a replacement for the terminal. An agent can
@@ -28,6 +32,7 @@ path structured, host-aware, and measurable.
 | --- | --- | --- |
 | Agents frequently know a concrete name, string, import, or regex before they know the file. | Make exact search a first-class native tool. | Avoids broad file scans and gives citable lines immediately. |
 | Exploratory questions need entry points, not an unbounded semantic answer. | Combine exact-hit evidence with bounded graph ranking in `codebase_query`. | Keeps exploration grounded in repository files. |
+| A named-function delegation question normally causes two sequential calls. | Trace one exact anchor and direct indexed edges in `codebase_query` mode `trace`. | Keeps direct relation answers to one native call without implying graph completeness. |
 | A local server path can refer to the wrong checkout on multi-host BB. | Treat the active thread environment as authoritative and use BB host-file APIs for remote workspaces. | Prevents silent cross-workspace reads. |
 | Static analysis is useful but incomplete. | Report graph completeness and dynamic boundaries with structural results. | A missing edge is not presented as proof of no runtime dependency. |
 | Agent tool use should be observed, not assumed. | Record per-surface feedback and follow-up search outcomes. | Lets maintainers measure whether routing reduces unnecessary discovery work. |

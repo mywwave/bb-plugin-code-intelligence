@@ -64,6 +64,12 @@ export interface InstantGrepBatchResult extends InstantGrepResult {
   readonly pattern: string;
 }
 
+/** One remote file prepared once per host-file snapshot for repeated searches. */
+export interface PreparedInstantGrepSource {
+  readonly file: string;
+  readonly lines: readonly string[];
+}
+
 interface RipgrepEvent {
   readonly type?: string;
   readonly data?: {
@@ -373,7 +379,11 @@ export async function instantGrep(root: string, options: InstantGrepOptions): Pr
 
 function globMatches(path: string, glob: string | undefined): boolean {
   if (glob === undefined) return true;
-  let expression = "^";
+  // Ripgrep applies a glob without a path separator to every basename in the
+  // tree (`--glob '*.java'` matches `src/main/App.java`). The host snapshot
+  // receives repository-relative paths, so mirror that implicit recursive
+  // prefix before translating the remaining glob syntax.
+  let expression = glob.includes("/") ? "^" : "^(?:.*/)?";
   for (let index = 0; index < glob.length; index++) {
     const character = glob[index]!;
     if (character === "*") {
@@ -419,6 +429,28 @@ export async function instantGrepSources(
   sources: ReadonlyMap<string, string>,
   options: InstantGrepOptions,
 ): Promise<InstantGrepResult> {
+  return instantGrepPreparedSources(prepareInstantGrepSources(sources), options);
+}
+
+/**
+ * Sorts the immutable host-file snapshot and splits physical lines once.
+ *
+ * The remote engine otherwise repeated both O(files log files) sorting and
+ * O(total source bytes) splitting for every agent search over the same index.
+ */
+export function prepareInstantGrepSources(
+  sources: ReadonlyMap<string, string>,
+): readonly PreparedInstantGrepSource[] {
+  return [...sources.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([file, source]) => ({ file, lines: source.split("\n") }));
+}
+
+/** Searches a prepared host-file snapshot without re-sorting or re-splitting it. */
+export async function instantGrepPreparedSources(
+  sources: readonly PreparedInstantGrepSource[],
+  options: InstantGrepOptions,
+): Promise<InstantGrepResult> {
   validateOptions(options);
   const limit = normalizedLimit(options.limit);
   const offset = normalizedNonNegative(options.offset, "offset", 100_000);
@@ -429,10 +461,9 @@ export async function instantGrepSources(
   const counts: InstantGrepCount[] = [];
   const candidates: InstantGrepMatch[] = [];
 
-  for (const [file, source] of [...sources.entries()].sort(([left], [right]) => left.localeCompare(right))) {
+  for (const { file, lines } of sources) {
     if (options.signal?.aborted) throw new Error("instant_grep aborted");
     if (!globMatches(file, options.glob)) continue;
-    const lines = source.split("\n");
     const lineIndexes = lines.flatMap((line, index) => matchesLine(line) ? [index] : []);
     if (lineIndexes.length === 0) continue;
     if ((options.outputMode ?? "content") === "files_with_matches") {
