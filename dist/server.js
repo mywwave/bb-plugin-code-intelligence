@@ -15025,9 +15025,7 @@ function chao1(observed, singletons, doubletons, knownMissing = 0) {
     throw new Error("counts must be non-negative");
   }
   if (singletons + doubletons > observed) {
-    throw new Error(
-      `f\u2081 + f\u2082 (${singletons + doubletons}) cannot exceed observed (${observed})`
-    );
+    throw new Error(`f\u2081 + f\u2082 (${singletons + doubletons}) cannot exceed observed (${observed})`);
   }
   if (knownMissing < 0) throw new Error("knownMissing must be non-negative");
   const unseen = doubletons > 0 ? singletons * singletons / (2 * doubletons) : (
@@ -15384,10 +15382,14 @@ async function extractFile(file2, language, source) {
 }
 function declaredTypeRelations(node, language, file2, subtype) {
   const relations = [];
-  const children = (parent) => Array.from({ length: parent.namedChildCount }, (_, index) => parent.namedChild(index)).filter((child2) => child2 !== null);
+  const children = (parent) => Array.from({ length: parent.namedChildCount }, (_, index) => parent.namedChild(index)).filter(
+    (child2) => child2 !== null
+  );
   const child = (parent, type) => children(parent).find((candidate) => candidate.type === type);
   const typeName = (candidate) => {
-    if (["identifier", "type_identifier", "scoped_type_identifier", "property_identifier", "field_identifier"].includes(candidate.type)) {
+    if (["identifier", "type_identifier", "scoped_type_identifier", "property_identifier", "field_identifier"].includes(
+      candidate.type
+    )) {
       return candidate.text.split(".").at(-1);
     }
     if (["attribute", "member_expression"].includes(candidate.type)) {
@@ -15763,13 +15765,7 @@ function resolveProject(files) {
         unknown2++;
         continue;
       }
-      const proposals = proposeAll(
-        call,
-        candidates,
-        importsByFile,
-        typesByFile,
-        methodsByClass
-      );
+      const proposals = proposeAll(call, candidates, importsByFile, typesByFile, methodsByClass);
       for (const [strategy, symbol2] of proposals) {
         if (symbol2.id === call.fromSymbolId) continue;
         const key = `${call.fromSymbolId}\0${symbol2.id}`;
@@ -15846,8 +15842,11 @@ function resolveTypeRelations(files, symbols) {
       result.push({ subtype: subtype.id, supertype: supertype.id, kind: relation2.kind });
       if (relation2.kind !== "extends") continue;
       for (const method of methodsByClassId.get(subtype.id) ?? []) {
-        const overridden = (methodsByClassId.get(supertype.id) ?? []).filter((candidate) => candidate.name === method.name);
-        if (overridden.length === 1) result.push({ subtype: method.id, supertype: overridden[0].id, kind: "overrides" });
+        const overridden = (methodsByClassId.get(supertype.id) ?? []).filter(
+          (candidate) => candidate.name === method.name
+        );
+        if (overridden.length === 1)
+          result.push({ subtype: method.id, supertype: overridden[0].id, kind: "overrides" });
       }
     }
   }
@@ -15911,9 +15910,7 @@ function proposeAll(call, candidates, importsByFile, typesByFile, methodsByClass
   if (call.receiver !== null) {
     const receiverType = typesByFile.get(call.file)?.get(call.receiver);
     if (receiverType !== void 0) {
-      const owned = (methodsByClass.get(receiverType) ?? []).filter(
-        (method) => method.name === call.name
-      );
+      const owned = (methodsByClass.get(receiverType) ?? []).filter((method) => method.name === call.name);
       if (owned.length === 1) proposals.set("typedReceiver", owned[0]);
     }
   }
@@ -16056,16 +16053,7 @@ async function loadCochangeIndex(root) {
   try {
     const { stdout } = await execFileAsync(
       "git",
-      [
-        "-C",
-        root,
-        "log",
-        "--name-only",
-        "--pretty=format:%H",
-        "--diff-filter=ACMR",
-        "--no-merges",
-        `-${MAX_COMMITS}`
-      ],
+      ["-C", root, "log", "--name-only", "--pretty=format:%H", "--diff-filter=ACMR", "--no-merges", `-${MAX_COMMITS}`],
       {
         maxBuffer: 64 * 1024 * 1024,
         timeout: 6e4
@@ -16528,10 +16516,7 @@ function blastRadiusOf(index, roots) {
     const symbol2 = index.symbols[node];
     const files = [...new Set(callers.map((caller) => index.symbols[caller].file))];
     const testFiles = [
-      .../* @__PURE__ */ new Set([
-        ...files.filter(isTestFile),
-        ...(index.importersOf.get(node) ?? []).filter(isTestFile)
-      ])
+      .../* @__PURE__ */ new Set([...files.filter(isTestFile), ...(index.importersOf.get(node) ?? []).filter(isTestFile)])
     ];
     out.push({
       id: symbol2.id,
@@ -16813,7 +16798,17 @@ function searchFlags(options) {
 }
 function buildInstantGrepArgs(options) {
   validateOptions(options);
-  return ["--json", "--line-number", "--no-heading", "--color", "never", ...searchFlags(options), "--", options.pattern, "."];
+  return [
+    "--json",
+    "--line-number",
+    "--no-heading",
+    "--color",
+    "never",
+    ...searchFlags(options),
+    "--",
+    options.pattern,
+    "."
+  ];
 }
 function appendBounded(value, chunk, limit = 16384) {
   return value.length >= limit ? value : `${value}${chunk}`.slice(0, limit);
@@ -16864,7 +16859,8 @@ function collectNullRecords(root, args, limit, signal) {
       if (settled) return;
       settled = true;
       signal?.removeEventListener("abort", abort);
-      if (code === 0 || code === 1) resolve({ records: records.slice(0, limit), totalExceedsLimit: records.length > limit });
+      if (code === 0 || code === 1)
+        resolve({ records: records.slice(0, limit), totalExceedsLimit: records.length > limit });
       else reject(new Error(stderr.trim() || `ripgrep exited with code ${code ?? "unknown"}`));
     });
     if (signal?.aborted) abort();
@@ -16918,7 +16914,8 @@ function collectCountRecords(root, args, limit, signal) {
       if (settled) return;
       settled = true;
       signal?.removeEventListener("abort", abort);
-      if (code === 0 || code === 1) resolve({ counts: counts.slice(0, limit), totalExceedsLimit: counts.length > limit });
+      if (code === 0 || code === 1)
+        resolve({ counts: counts.slice(0, limit), totalExceedsLimit: counts.length > limit });
       else reject(new Error(stderr.trim() || `ripgrep exited with code ${code ?? "unknown"}`));
     });
     if (signal?.aborted) abort();
@@ -16928,24 +16925,26 @@ function collectCountRecords(root, args, limit, signal) {
 async function attachContext(root, matches, before, after) {
   if (before === 0 && after === 0) return matches;
   const sourceByFile = /* @__PURE__ */ new Map();
-  return Promise.all(matches.map(async (match) => {
-    let lines = sourceByFile.get(match.file);
-    if (lines === void 0) {
-      try {
-        lines = (await readFile2(join2(root, match.file), "utf8")).split(/\r?\n/);
-      } catch {
-        return match;
+  return Promise.all(
+    matches.map(async (match) => {
+      let lines = sourceByFile.get(match.file);
+      if (lines === void 0) {
+        try {
+          lines = (await readFile2(join2(root, match.file), "utf8")).split(/\r?\n/);
+        } catch {
+          return match;
+        }
+        sourceByFile.set(match.file, lines);
       }
-      sourceByFile.set(match.file, lines);
-    }
-    const index = match.line - 1;
-    const make = (start, end) => lines.slice(Math.max(0, start), Math.min(lines.length, end)).map((text, position) => ({ line: Math.max(0, start) + position + 1, text }));
-    return {
-      ...match,
-      ...before === 0 ? {} : { before: make(index - before, index) },
-      ...after === 0 ? {} : { after: make(index + 1, index + 1 + after) }
-    };
-  }));
+      const index = match.line - 1;
+      const make = (start, end) => lines.slice(Math.max(0, start), Math.min(lines.length, end)).map((text, position) => ({ line: Math.max(0, start) + position + 1, text }));
+      return {
+        ...match,
+        ...before === 0 ? {} : { before: make(index - before, index) },
+        ...after === 0 ? {} : { after: make(index + 1, index + 1 + after) }
+      };
+    })
+  );
 }
 function streamContentSearch(root, options, limit, offset) {
   const args = buildInstantGrepArgs(options);
@@ -17027,7 +17026,12 @@ async function contentSearch(root, options) {
   const limit = normalizedLimit(options.limit);
   const offset = normalizedNonNegative(options.offset, "offset", 1e5);
   const page = await streamContentSearch(root, options, limit, offset);
-  const matches = await attachContext(root, page.matches, normalizedNonNegative(options.beforeContext, "beforeContext", MAX_CONTEXT_LINES), normalizedNonNegative(options.afterContext, "afterContext", MAX_CONTEXT_LINES));
+  const matches = await attachContext(
+    root,
+    page.matches,
+    normalizedNonNegative(options.beforeContext, "beforeContext", MAX_CONTEXT_LINES),
+    normalizedNonNegative(options.afterContext, "afterContext", MAX_CONTEXT_LINES)
+  );
   return {
     matches,
     truncated: page.truncated,
@@ -17036,12 +17040,22 @@ async function contentSearch(root, options) {
 }
 async function fileListSearch(root, options) {
   const limit = normalizedLimit(options.limit);
-  const result = await collectNullRecords(root, ["--null", "--files-with-matches", ...searchFlags(options), "--", options.pattern, "."], limit, options.signal);
+  const result = await collectNullRecords(
+    root,
+    ["--null", "--files-with-matches", ...searchFlags(options), "--", options.pattern, "."],
+    limit,
+    options.signal
+  );
   return { matches: [], files: result.records, truncated: result.totalExceedsLimit };
 }
 async function countSearch(root, options) {
   const limit = normalizedLimit(options.limit);
-  const result = await collectCountRecords(root, ["--null", "--count", ...searchFlags(options), "--", options.pattern, "."], limit, options.signal);
+  const result = await collectCountRecords(
+    root,
+    ["--null", "--count", ...searchFlags(options), "--", options.pattern, "."],
+    limit,
+    options.signal
+  );
   return { matches: [], counts: result.counts, truncated: result.totalExceedsLimit };
 }
 async function instantGrep(root, options) {
@@ -17143,7 +17157,9 @@ async function instantGrepPreparedSources(sources, options) {
 }
 async function instantGrepBatch(root, options) {
   if (options.length === 0 || options.length > 10) throw new Error("patterns must contain from 1 through 10 entries");
-  return Promise.all(options.map(async (option) => ({ pattern: option.pattern, ...await instantGrep(root, option) })));
+  return Promise.all(
+    options.map(async (option) => ({ pattern: option.pattern, ...await instantGrep(root, option) }))
+  );
 }
 
 // src/codebase-query.ts
@@ -17190,7 +17206,9 @@ function buildCodebaseQueryPatterns(query) {
     ...[...query.matchAll(/\b[A-Za-z_$][A-Za-z0-9_$]*(?:[A-Z_$][A-Za-z0-9_$]*)+\b/g)].map((match) => match[0])
   ]);
   const withoutExplicit = explicit.reduce((text, term) => text.replaceAll(term, " "), query);
-  const natural = unique(tokenizeIdentifiers(withoutExplicit).filter((term) => !NATURAL_LANGUAGE_NOISE.has(term))).sort((left, right) => right.length - left.length);
+  const natural = unique(tokenizeIdentifiers(withoutExplicit).filter((term) => !NATURAL_LANGUAGE_NOISE.has(term))).sort(
+    (left, right) => right.length - left.length
+  );
   return [...explicit, ...natural].slice(0, MAX_PATTERNS);
 }
 function traceTarget(candidates) {
@@ -17275,23 +17293,43 @@ function directTrace(index, matches, target) {
       name: symbol2.name,
       file: symbol2.file,
       lines: [symbol2.startLine + 1, symbol2.endLine + 1],
-      callers: uniqueRelations((index.callersOf.get(node) ?? []).map((caller) => relation(index, caller, node))).slice(0, 12),
-      callees: uniqueRelations((index.calleesOf.get(node) ?? []).map((callee) => relation(index, node, callee))).slice(0, 12),
-      supertypes: uniqueRelations((index.supertypesOf.get(node) ?? []).map((target2) => relation(index, node, target2, "extends"))).slice(0, 12),
-      subtypes: uniqueRelations((index.subtypesOf.get(node) ?? []).map((target2) => relation(index, node, target2, "extends"))).slice(0, 12),
-      implements: uniqueRelations((index.implementsOf.get(node) ?? []).map((target2) => relation(index, node, target2, "implements"))).slice(0, 12),
-      implementations: uniqueRelations((index.implementationsOf.get(node) ?? []).map((target2) => relation(index, node, target2, "implements"))).slice(0, 12),
-      overrides: uniqueRelations((index.overridesOf.get(node) ?? []).map((target2) => relation(index, node, target2, "overrides"))).slice(0, 12),
-      overriddenBy: uniqueRelations((index.overriddenBy.get(node) ?? []).map((target2) => relation(index, node, target2, "overrides"))).slice(0, 12)
+      callers: uniqueRelations((index.callersOf.get(node) ?? []).map((caller) => relation(index, caller, node))).slice(
+        0,
+        12
+      ),
+      callees: uniqueRelations((index.calleesOf.get(node) ?? []).map((callee) => relation(index, node, callee))).slice(
+        0,
+        12
+      ),
+      supertypes: uniqueRelations(
+        (index.supertypesOf.get(node) ?? []).map((target2) => relation(index, node, target2, "extends"))
+      ).slice(0, 12),
+      subtypes: uniqueRelations(
+        (index.subtypesOf.get(node) ?? []).map((target2) => relation(index, node, target2, "extends"))
+      ).slice(0, 12),
+      implements: uniqueRelations(
+        (index.implementsOf.get(node) ?? []).map((target2) => relation(index, node, target2, "implements"))
+      ).slice(0, 12),
+      implementations: uniqueRelations(
+        (index.implementationsOf.get(node) ?? []).map((target2) => relation(index, node, target2, "implements"))
+      ).slice(0, 12),
+      overrides: uniqueRelations(
+        (index.overridesOf.get(node) ?? []).map((target2) => relation(index, node, target2, "overrides"))
+      ).slice(0, 12),
+      overriddenBy: uniqueRelations(
+        (index.overriddenBy.get(node) ?? []).map((target2) => relation(index, node, target2, "overrides"))
+      ).slice(0, 12)
     });
   }
   return { symbols };
 }
 function traceEvidence(matches, trace) {
   if (trace.symbols.length === 0) return matches;
-  return matches.filter((match) => trace.symbols.some(
-    (symbol2) => matchIndexFile(match.file) === symbol2.file && match.line >= symbol2.lines[0] && match.line <= symbol2.lines[1]
-  ));
+  return matches.filter(
+    (match) => trace.symbols.some(
+      (symbol2) => matchIndexFile(match.file) === symbol2.file && match.line >= symbol2.lines[0] && match.line <= symbol2.lines[1]
+    )
+  );
 }
 async function queryCodebase(root, index, options) {
   const startedAt = performance.now();
@@ -17300,21 +17338,25 @@ async function queryCodebase(root, index, options) {
   const target = mode === "trace" ? traceTarget(candidates) : void 0;
   const patterns = target === void 0 ? mode === "trace" ? [] : candidates : [target.anchor];
   const exactStartedAt = performance.now();
-  const exactPromise = patterns.length === 0 ? Promise.resolve([]) : (options.search ?? ((searchOptions) => instantGrepBatch(root, searchOptions)))(patterns.map((pattern) => ({
-    pattern,
-    caseSensitive: /[A-Z]/.test(pattern),
-    word: true,
-    limit: EXACT_LIMIT_PER_PATTERN,
-    ...mode === "trace" ? { afterContext: 12 } : {},
-    signal: options.signal
-  })));
+  const exactPromise = patterns.length === 0 ? Promise.resolve([]) : (options.search ?? ((searchOptions) => instantGrepBatch(root, searchOptions)))(
+    patterns.map((pattern) => ({
+      pattern,
+      caseSensitive: /[A-Z]/.test(pattern),
+      word: true,
+      limit: EXACT_LIMIT_PER_PATTERN,
+      ...mode === "trace" ? { afterContext: 12 } : {},
+      signal: options.signal
+    }))
+  );
   if (mode === "explore") {
     const graphStartedAt2 = performance.now();
     const context = retrieve(index, { question: options.query, budgetTokens: options.budgetTokens });
     const graphMs2 = performance.now() - graphStartedAt2;
     const exact2 = await exactPromise;
     const exactSearchMs2 = performance.now() - exactStartedAt;
-    const exactMatches2 = exact2.flatMap((result) => result.matches.map((match) => ({ pattern: result.pattern, ...match })));
+    const exactMatches2 = exact2.flatMap(
+      (result) => result.matches.map((match) => ({ pattern: result.pattern, ...match }))
+    );
     return {
       query: options.query,
       mode,
@@ -17329,7 +17371,9 @@ async function queryCodebase(root, index, options) {
     exactSearchMs = performance.now() - exactStartedAt;
     return result;
   });
-  const exactMatches = exact.flatMap((result) => result.matches.map((match) => ({ pattern: result.pattern, ...match })));
+  const exactMatches = exact.flatMap(
+    (result) => result.matches.map((match) => ({ pattern: result.pattern, ...match }))
+  );
   const graphStartedAt = performance.now();
   const trace = directTrace(index, exactMatches, target);
   const graphMs = performance.now() - graphStartedAt;
@@ -17353,7 +17397,10 @@ var OVERVIEW_FILES = ["README.md", "docs/repository-overview.md", "docs/system-o
 var MANIFESTS = ["package.json", "pnpm-lock.yaml", "yarn.lock", "package-lock.json", "bun.lockb"];
 var CHECKS = ["test", "typecheck", "lint"];
 async function fileExists(path) {
-  return lstat(path).then((info) => info.isFile() && !info.isSymbolicLink(), () => false);
+  return lstat(path).then(
+    (info) => info.isFile() && !info.isSymbolicLink(),
+    () => false
+  );
 }
 async function readBounded(path, maximum) {
   const handle = await open(path, "r");
@@ -17388,7 +17435,9 @@ function languagesIn(index) {
     }
     files.add(symbol2.file);
   }
-  return Object.fromEntries([...filesByLanguage].sort(([left], [right]) => left.localeCompare(right)).map(([language, files]) => [language, files.size]));
+  return Object.fromEntries(
+    [...filesByLanguage].sort(([left], [right]) => left.localeCompare(right)).map(([language, files]) => [language, files.size])
+  );
 }
 function scriptsFrom(packageJson) {
   if (packageJson === null) return {};
@@ -17396,27 +17445,35 @@ function scriptsFrom(packageJson) {
     const parsed = JSON.parse(packageJson);
     if (typeof parsed.scripts !== "object" || parsed.scripts === null) return {};
     const scripts = parsed.scripts;
-    return Object.fromEntries(CHECKS.flatMap(
-      (name) => typeof scripts[name] === "string" && scripts[name].trim() !== "" ? [[name, scripts[name].trim()]] : []
-    ));
+    return Object.fromEntries(
+      CHECKS.flatMap(
+        (name) => typeof scripts[name] === "string" && scripts[name].trim() !== "" ? [[name, scripts[name].trim()]] : []
+      )
+    );
   } catch {
     return {};
   }
 }
 async function buildRepositoryContext(root, index) {
-  const manifestFlags = await Promise.all(MANIFESTS.map(async (name) => [name, await fileExists(join3(root, name))]));
+  const manifestFlags = await Promise.all(
+    MANIFESTS.map(async (name) => [name, await fileExists(join3(root, name))])
+  );
   const manifests = manifestFlags.filter(([, exists]) => exists).map(([name]) => name);
   const packageJson = manifests.includes("package.json") ? await readBounded(join3(root, "package.json"), 256 * 1024) : null;
-  const rules = (await Promise.all(RULE_FILES.map(async (name) => {
-    const path = join3(root, name);
-    if (!await fileExists(path)) return null;
-    return { path: name, content: await readBounded(path, MAX_RULE_BYTES) };
-  }))).filter((rule) => rule !== null);
-  const overview = (await Promise.all(OVERVIEW_FILES.map(async (name) => {
-    const path = join3(root, name);
-    if (!await fileExists(path)) return null;
-    return { path: name, content: await readBounded(path, MAX_OVERVIEW_BYTES) };
-  }))).filter((file2) => file2 !== null);
+  const rules = (await Promise.all(
+    RULE_FILES.map(async (name) => {
+      const path = join3(root, name);
+      if (!await fileExists(path)) return null;
+      return { path: name, content: await readBounded(path, MAX_RULE_BYTES) };
+    })
+  )).filter((rule) => rule !== null);
+  const overview = (await Promise.all(
+    OVERVIEW_FILES.map(async (name) => {
+      const path = join3(root, name);
+      if (!await fileExists(path)) return null;
+      return { path: name, content: await readBounded(path, MAX_OVERVIEW_BYTES) };
+    })
+  )).filter((file2) => file2 !== null);
   return {
     root,
     packageManager: packageManager(manifests),
@@ -17585,7 +17642,14 @@ async function runVerification(plan, options = {}) {
   const checks = [];
   for (const check2 of plan.checks) {
     if (options.signal?.aborted) {
-      checks.push({ ...check2, exitCode: null, stdout: "", stderr: "verification cancelled", durationMs: 0, status: "cancelled" });
+      checks.push({
+        ...check2,
+        exitCode: null,
+        stdout: "",
+        stderr: "verification cancelled",
+        durationMs: 0,
+        status: "cancelled"
+      });
       continue;
     }
     try {
@@ -17704,9 +17768,7 @@ function findDynamicBoundaries(file2, body, startLine) {
     let match;
     while ((match = pattern.exec(scanned)) !== null) {
       const line = startLine + countLines(scanned.slice(0, match.index)) + 1;
-      const key = form.keyOf?.(
-        form.pattern.exec(body.slice(match.index, match.index + match[0].length)) ?? match
-      );
+      const key = form.keyOf?.(form.pattern.exec(body.slice(match.index, match.index + match[0].length)) ?? match);
       const id = `${form.form}:${line}`;
       if (seen.has(id)) continue;
       seen.add(id);
@@ -17791,9 +17853,7 @@ var IndexRegistry = class {
    * one is queried would be seeing a cache detail, not information.
    */
   list() {
-    return [...this.entries.values()].sort(
-      (left, right) => left.root.localeCompare(right.root)
-    );
+    return [...this.entries.values()].sort((left, right) => left.root.localeCompare(right.root));
   }
   clear() {
     this.entries.clear();
@@ -17966,12 +18026,7 @@ async function collectRemoteSources(options) {
 // src/config.ts
 var INSTRUCTION_STYLES = ["playbook", "budget", "short", "off"];
 var TOOL_SURFACES = ["lean", "full"];
-var LEAN_AGENT_TOOLS = [
-  "codebase_query",
-  "instant_grep",
-  "prechange_impact",
-  "verify_change"
-];
+var LEAN_AGENT_TOOLS = ["codebase_query", "instant_grep", "prechange_impact", "verify_change"];
 var FULL_AGENT_TOOLS = [
   "instant_grep",
   "codebase_query",
@@ -18013,39 +18068,21 @@ function normalizeCodeGraphConfig(value) {
   const source = objectValue(value);
   return {
     autoIndex: booleanValue(source.autoIndex, DEFAULT_CODE_GRAPH_CONFIG.autoIndex),
-    respectGitignore: booleanValue(
-      source.respectGitignore,
-      DEFAULT_CODE_GRAPH_CONFIG.respectGitignore
-    ),
+    respectGitignore: booleanValue(source.respectGitignore, DEFAULT_CODE_GRAPH_CONFIG.respectGitignore),
     includeHiddenDirectories: booleanValue(
       source.includeHiddenDirectories,
       DEFAULT_CODE_GRAPH_CONFIG.includeHiddenDirectories
     ),
-    backgroundRefresh: booleanValue(
-      source.backgroundRefresh,
-      DEFAULT_CODE_GRAPH_CONFIG.backgroundRefresh
-    ),
+    backgroundRefresh: booleanValue(source.backgroundRefresh, DEFAULT_CODE_GRAPH_CONFIG.backgroundRefresh),
     refreshIntervalSeconds: integerValue(
       source.refreshIntervalSeconds,
       DEFAULT_CODE_GRAPH_CONFIG.refreshIntervalSeconds,
       ...LIMITS.refreshIntervalSeconds
     ),
-    warmLimit: integerValue(
-      source.warmLimit,
-      DEFAULT_CODE_GRAPH_CONFIG.warmLimit,
-      ...LIMITS.warmLimit
-    ),
-    includeSnippets: booleanValue(
-      source.includeSnippets,
-      DEFAULT_CODE_GRAPH_CONFIG.includeSnippets
-    ),
-    useCochange: booleanValue(
-      source.useCochange,
-      DEFAULT_CODE_GRAPH_CONFIG.useCochange
-    ),
-    instructionStyle: INSTRUCTION_STYLES.includes(
-      source.instructionStyle
-    ) ? source.instructionStyle : DEFAULT_CODE_GRAPH_CONFIG.instructionStyle,
+    warmLimit: integerValue(source.warmLimit, DEFAULT_CODE_GRAPH_CONFIG.warmLimit, ...LIMITS.warmLimit),
+    includeSnippets: booleanValue(source.includeSnippets, DEFAULT_CODE_GRAPH_CONFIG.includeSnippets),
+    useCochange: booleanValue(source.useCochange, DEFAULT_CODE_GRAPH_CONFIG.useCochange),
+    instructionStyle: INSTRUCTION_STYLES.includes(source.instructionStyle) ? source.instructionStyle : DEFAULT_CODE_GRAPH_CONFIG.instructionStyle,
     toolSurface: TOOL_SURFACES.includes(source.toolSurface) ? source.toolSurface : DEFAULT_CODE_GRAPH_CONFIG.toolSurface,
     defaultBudgetTokens: integerValue(
       source.defaultBudgetTokens,
@@ -18408,15 +18445,9 @@ var rpcContract = defineRpcContract({
   }
 });
 async function plugin(bb) {
-  let config2 = normalizeCodeGraphConfig(
-    await bb.storage.kv.get(CONFIG_KEY)
-  );
+  let config2 = normalizeCodeGraphConfig(await bb.storage.kv.get(CONFIG_KEY));
   const db = bb.storage.database();
-  bb.storage.migrate(db, [
-    ...MIGRATIONS,
-    ...PERSISTENCE_MIGRATIONS,
-    ...FEEDBACK_SURFACE_MIGRATIONS
-  ]);
+  bb.storage.migrate(db, [...MIGRATIONS, ...PERSISTENCE_MIGRATIONS, ...FEEDBACK_SURFACE_MIGRATIONS]);
   const indexes = new IndexRegistry();
   const repositoryContexts = /* @__PURE__ */ new Map();
   const rootsByProject = /* @__PURE__ */ new Map();
@@ -18469,7 +18500,9 @@ async function plugin(bb) {
       truncated: listed.truncated,
       isIgnored: (file2) => ignored !== null && ignored.ignores(file2),
       isExcluded: (file2) => file2.split("/").some(
-        (part) => part.startsWith(".") || ["node_modules", "dist", "build", "out", "target", "vendor", "venv", "__pycache__", "coverage"].includes(part)
+        (part) => part.startsWith(".") || ["node_modules", "dist", "build", "out", "target", "vendor", "venv", "__pycache__", "coverage"].includes(
+          part
+        )
       ),
       throwIfAborted: () => throwIfAborted(signal),
       read: async (file2) => {
@@ -18482,9 +18515,7 @@ async function plugin(bb) {
         });
       }
     });
-    const fileHashes = new Map(
-      [...collection.sources].map(([file2, source]) => [file2, hashContent(source)])
-    );
+    const fileHashes = new Map([...collection.sources].map(([file2, source]) => [file2, hashContent(source)]));
     remoteSources.set(root, collection.sources);
     preparedRemoteSources.set(root, prepareInstantGrepSources(collection.sources));
     remoteInventories.set(root, collection.inventory);
@@ -18585,11 +18616,7 @@ async function plugin(bb) {
         bb.log.info(
           `incremental refresh ${rootLabel(root)}: ${freshness.changed.length} changed, ${freshness.added.length} new, ${freshness.removed.length} deleted`
         );
-        extractions = await mergeIncrementalExtractions(
-          stored.extractions,
-          freshness,
-          parseFileOrSkip
-        );
+        extractions = await mergeIncrementalExtractions(stored.extractions, freshness, parseFileOrSkip);
         resolution = resolveProject(extractions);
         scan = {
           symbols: resolution.symbols,
@@ -18736,11 +18763,14 @@ async function plugin(bb) {
     if (!isRemoteRoot(root)) return instantGrepBatch(root, options);
     const sources = remoteSources.get(root);
     const prepared = preparedRemoteSources.get(root);
-    if (sources === void 0 || prepared === void 0) throw new Error(`remote workspace is not indexed: ${rootLabel(root)}`);
-    return Promise.all(options.map(async (option) => ({
-      pattern: option.pattern,
-      ...await instantGrepPreparedSources(prepared, option)
-    })));
+    if (sources === void 0 || prepared === void 0)
+      throw new Error(`remote workspace is not indexed: ${rootLabel(root)}`);
+    return Promise.all(
+      options.map(async (option) => ({
+        pattern: option.pattern,
+        ...await instantGrepPreparedSources(prepared, option)
+      }))
+    );
   }
   async function recordFeedbackAnswer(input) {
     const sequenceAtAnswer = await currentSequence(bb, input.threadId);
@@ -18826,40 +18856,67 @@ async function plugin(bb) {
       outputMode: external_exports.enum(["content", "files_with_matches", "count"]).default("content").describe("Return matching lines, matching files, or per-file counts."),
       beforeContext: external_exports.number().int().min(0).max(MAX_CONTEXT_LINES).default(0).describe("Source lines before every content match (at most 32)."),
       afterContext: external_exports.number().int().min(0).max(MAX_CONTEXT_LINES).default(0).describe("Source lines after every content match (at most 32)."),
-      root: external_exports.string().optional().describe("Explicit server-local root. Omit to use the current thread workspace, including a remote environment.")
+      root: external_exports.string().optional().describe(
+        "Explicit server-local root. Omit to use the current thread workspace, including a remote environment."
+      )
     }).refine(({ pattern, patterns }) => pattern === void 0 !== (patterns === void 0), {
       message: "Pass exactly one of pattern or patterns."
     }),
-    async execute({ pattern, patterns, regex, caseSensitive, word, glob, limit, offset, outputMode, beforeContext, afterContext, root: requestedRoot }, { threadId, projectId, signal }) {
+    async execute({
+      pattern,
+      patterns,
+      regex,
+      caseSensitive,
+      word,
+      glob,
+      limit,
+      offset,
+      outputMode,
+      beforeContext,
+      afterContext,
+      root: requestedRoot
+    }, { threadId, projectId, signal }) {
       const root = await resolveRoot(projectId ?? null, requestedRoot ?? null, threadId, signal);
       if (root === null) {
         return {
-          content: [{ type: "text", text: "No BB project repository is available. Open a project or pass `root` explicitly." }],
+          content: [
+            {
+              type: "text",
+              text: "No BB project repository is available. Open a project or pass `root` explicitly."
+            }
+          ],
           isError: true
         };
       }
       try {
         const searchPatterns = patterns ?? [pattern];
         if (isRemoteRoot(root)) await ensureIndex(root, signal);
-        const results = await searchExact(root, searchPatterns.map((searchPattern) => ({
-          pattern: searchPattern,
-          regex,
-          caseSensitive,
-          word,
-          glob,
-          limit,
-          offset,
-          outputMode,
-          beforeContext,
-          afterContext,
-          signal
-        })));
+        const results = await searchExact(
+          root,
+          searchPatterns.map((searchPattern) => ({
+            pattern: searchPattern,
+            regex,
+            caseSensitive,
+            word,
+            glob,
+            limit,
+            offset,
+            outputMode,
+            beforeContext,
+            afterContext,
+            signal
+          }))
+        );
         if (typeof threadId === "string") {
-          const returnedFiles = [...new Set(results.flatMap((result) => [
-            ...result.matches.map((match) => match.file),
-            ...result.files ?? [],
-            ...(result.counts ?? []).map((count) => count.file)
-          ]))];
+          const returnedFiles = [
+            ...new Set(
+              results.flatMap((result) => [
+                ...result.matches.map((match) => match.file),
+                ...result.files ?? [],
+                ...(result.counts ?? []).map((count) => count.file)
+              ])
+            )
+          ];
           await recordFeedbackAnswer({
             threadId,
             surface: "instant_grep",
@@ -18873,7 +18930,22 @@ async function plugin(bb) {
         }
         const next = (result) => result.truncated ? "Refine pattern/glob or call again with nextOffset before treating this search as exhaustive." : outputMode === "content" ? "For a pure location/existence answer, cite this exact hit and stop. Do not open the file or chain structural tools unless you need lines beyond this hit." : "Use content mode on a selected file only when you need source lines.";
         return JSON.stringify(
-          searchPatterns.length === 1 ? { engine: isRemoteRoot(root) ? "BB host-file snapshot" : "ripgrep", root: rootLabel(root), mode: regex ? "regex" : "literal", outputMode, ...results[0], ...inventoryLimitField(root), next: next(results[0]) } : { engine: isRemoteRoot(root) ? "BB host-file snapshot" : "ripgrep", root: rootLabel(root), outputMode, results, ...inventoryLimitField(root), next: "Each result is independent; answer from exact hits or narrow only the query that needs it." },
+          searchPatterns.length === 1 ? {
+            engine: isRemoteRoot(root) ? "BB host-file snapshot" : "ripgrep",
+            root: rootLabel(root),
+            mode: regex ? "regex" : "literal",
+            outputMode,
+            ...results[0],
+            ...inventoryLimitField(root),
+            next: next(results[0])
+          } : {
+            engine: isRemoteRoot(root) ? "BB host-file snapshot" : "ripgrep",
+            root: rootLabel(root),
+            outputMode,
+            results,
+            ...inventoryLimitField(root),
+            next: "Each result is independent; answer from exact hits or narrow only the query that needs it."
+          },
           null,
           2
         );
@@ -18890,17 +18962,28 @@ async function plugin(bb) {
     description: "PRIMARY one-shot navigation for exploratory how/where questions and known-ID relations. Explore mode is Read-equivalent: exact hits plus ranked symbol snippets (line-numbered), call edges, blast radius, and dynamicBoundaries in one capped call \u2014 treat snippets as already Read. Trace mode returns exact source context and direct static relations for a known identifier. No LLM runs inside it.",
     instructions: "Call once for an exploratory question or a known identifier's direct caller/callee/delegation (mode trace). Skip when the prompt already has enough context. Explore returns Read-equivalent snippets + edges + blast radius \u2014 answer from that payload; do not follow with instant_grep, symbol_lookup, or code_graph_context unless you need lines beyond the snippets. For a pure location or literal question with no structural need, use instant_grep instead.",
     parameters: external_exports.object({
-      query: external_exports.string().min(3).max(1e3).describe("Natural-language question about the codebase. Include an identifier in backticks when you know one."),
+      query: external_exports.string().min(3).max(1e3).describe(
+        "Natural-language question about the codebase. Include an identifier in backticks when you know one."
+      ),
       explanation: external_exports.string().min(8).max(300).describe("Why this bounded exploration or direct-relation trace fits the question."),
-      mode: external_exports.enum(["explore", "trace"]).optional().describe("Use trace only for a known identifier's direct caller, callee, or delegation; otherwise omit for exploratory ranking."),
+      mode: external_exports.enum(["explore", "trace"]).optional().describe(
+        "Use trace only for a known identifier's direct caller, callee, or delegation; otherwise omit for exploratory ranking."
+      ),
       budgetTokens: external_exports.number().int().min(256).max(32e3).optional().describe("Graph-context budget. Omit to use the plugin setting."),
-      root: external_exports.string().optional().describe("Explicit server-local root. Omit to use the current thread workspace, including a remote environment.")
+      root: external_exports.string().optional().describe(
+        "Explicit server-local root. Omit to use the current thread workspace, including a remote environment."
+      )
     }),
     async execute({ query, explanation, mode, budgetTokens, root: requestedRoot }, { threadId, projectId, signal }) {
       const root = await resolveRoot(projectId ?? null, requestedRoot ?? null, threadId, signal);
       if (root === null) {
         return {
-          content: [{ type: "text", text: "No BB project repository is available. Open a project or pass `root` explicitly." }],
+          content: [
+            {
+              type: "text",
+              text: "No BB project repository is available. Open a project or pass `root` explicitly."
+            }
+          ],
           isError: true
         };
       }
@@ -18926,62 +19009,68 @@ async function plugin(bb) {
             query,
             seeds: result.patterns,
             budgetTokens: effectiveBudget,
-            returnedFiles: [.../* @__PURE__ */ new Set([
-              ...result.exactMatches.map((match) => match.file),
-              ...context?.files ?? [],
-              ...trace?.symbols.map((symbol2) => symbol2.file) ?? []
-            ])],
+            returnedFiles: [
+              .../* @__PURE__ */ new Set([
+                ...result.exactMatches.map((match) => match.file),
+                ...context?.files ?? [],
+                ...trace?.symbols.map((symbol2) => symbol2.file) ?? []
+              ])
+            ],
             returnedSymbols: context?.symbols.map((symbol2) => symbol2.id) ?? trace?.symbols.map((symbol2) => symbol2.id) ?? [],
             tokensUsed: context?.tokensUsed ?? 0
           });
         }
-        return JSON.stringify({
-          engine: isRemoteRoot(ready.root) ? "BB host-file snapshot + graph index" : "ripgrep + local graph index",
-          root: rootLabel(ready.root),
-          query: result.query,
-          intent: explanation,
-          mode: result.mode,
-          patterns: result.patterns,
-          exactHits: result.exactMatches.slice(0, 12),
-          ...exploreSymbols === void 0 ? {} : {
-            symbols: exploreSymbols.slice(0, 12).map((symbol2) => ({
-              id: symbol2.id,
-              file: symbol2.file,
-              lines: [symbol2.startLine + 1, symbol2.endLine + 1],
-              tokens: symbol2.tokens,
-              via: symbol2.via,
-              ...config2.includeSnippets ? { snippet: symbol2.snippet ?? "" } : {}
-            })),
-            tokensUsed: context.tokensUsed,
-            budgetTokens: effectiveBudget,
-            dynamicBoundaries: boundariesIn(exploreSymbols).map((boundary) => ({
-              at: `${boundary.file}:${boundary.line}`,
-              form: boundary.form,
-              ...boundary.key === void 0 ? {} : { key: boundary.key }
-            })),
-            edges: context.edges.map((edge) => ({
-              from: edge.from,
-              to: edge.to,
-              via: edge.via
-            })),
-            blastRadius: context.blastRadius.map((entry) => ({
-              symbol: entry.id,
-              at: `${entry.file}:${entry.startLine + 1}`,
-              callers: entry.callers,
-              callerFiles: entry.callerFiles,
-              ...entry.testFiles.length > 0 ? { tests: entry.testFiles } : { tests: [], warning: "no covering tests found" }
-            })),
-            graphFiles: context.files.slice(0, 12)
+        return JSON.stringify(
+          {
+            engine: isRemoteRoot(ready.root) ? "BB host-file snapshot + graph index" : "ripgrep + local graph index",
+            root: rootLabel(ready.root),
+            query: result.query,
+            intent: explanation,
+            mode: result.mode,
+            patterns: result.patterns,
+            exactHits: result.exactMatches.slice(0, 12),
+            ...exploreSymbols === void 0 ? {} : {
+              symbols: exploreSymbols.slice(0, 12).map((symbol2) => ({
+                id: symbol2.id,
+                file: symbol2.file,
+                lines: [symbol2.startLine + 1, symbol2.endLine + 1],
+                tokens: symbol2.tokens,
+                via: symbol2.via,
+                ...config2.includeSnippets ? { snippet: symbol2.snippet ?? "" } : {}
+              })),
+              tokensUsed: context.tokensUsed,
+              budgetTokens: effectiveBudget,
+              dynamicBoundaries: boundariesIn(exploreSymbols).map((boundary) => ({
+                at: `${boundary.file}:${boundary.line}`,
+                form: boundary.form,
+                ...boundary.key === void 0 ? {} : { key: boundary.key }
+              })),
+              edges: context.edges.map((edge) => ({
+                from: edge.from,
+                to: edge.to,
+                via: edge.via
+              })),
+              blastRadius: context.blastRadius.map((entry) => ({
+                symbol: entry.id,
+                at: `${entry.file}:${entry.startLine + 1}`,
+                callers: entry.callers,
+                callerFiles: entry.callerFiles,
+                ...entry.testFiles.length > 0 ? { tests: entry.testFiles } : { tests: [], warning: "no covering tests found" }
+              })),
+              graphFiles: context.files.slice(0, 12)
+            },
+            ...trace === void 0 ? {} : { trace: trace.symbols },
+            graphCompleteness: ready.index.graphCompletenessReliable ? `>= ${(ready.index.graphCompleteness * 100).toFixed(0)}%` : "not estimable \u2014 too few edges were found by more than one strategy",
+            ...inventoryLimitField(ready.root),
+            timingMs: { index: indexMs, ...result.timingMs },
+            ...result.mode === "explore" && config2.includeSnippets ? {
+              note: "Snippets are truncated bodies \u2014 treat them as already Read. Open a file only when you need lines beyond them. graphCompleteness is a lower bound; reflection and dynamic dispatch are invisible to static analysis."
+            } : {},
+            next: result.mode === "trace" ? trace?.symbols.length === 0 ? "No indexed definition enclosed an exact hit. Refine the identifier or use instant_grep; an empty trace is not proof of no relation." : "The exact definition and direct relation above answer this trace. Answer now; do not call instant_grep or code_graph_context unless the user asks for source beyond this result or a wider structure." : exploreSymbols === void 0 || exploreSymbols.length === 0 ? "No ranked symbols for this query. Answer from exactHits if present, or refine the question; do not start a multi-tool search loop." : "Exact hits plus Read-equivalent snippets, edges, and blast radius above answer this exploration. Answer now; do not call instant_grep, symbol_lookup, or code_graph_context unless you need lines beyond the snippets or a wider structure."
           },
-          ...trace === void 0 ? {} : { trace: trace.symbols },
-          graphCompleteness: ready.index.graphCompletenessReliable ? `>= ${(ready.index.graphCompleteness * 100).toFixed(0)}%` : "not estimable \u2014 too few edges were found by more than one strategy",
-          ...inventoryLimitField(ready.root),
-          timingMs: { index: indexMs, ...result.timingMs },
-          ...result.mode === "explore" && config2.includeSnippets ? {
-            note: "Snippets are truncated bodies \u2014 treat them as already Read. Open a file only when you need lines beyond them. graphCompleteness is a lower bound; reflection and dynamic dispatch are invisible to static analysis."
-          } : {},
-          next: result.mode === "trace" ? trace?.symbols.length === 0 ? "No indexed definition enclosed an exact hit. Refine the identifier or use instant_grep; an empty trace is not proof of no relation." : "The exact definition and direct relation above answer this trace. Answer now; do not call instant_grep or code_graph_context unless the user asks for source beyond this result or a wider structure." : exploreSymbols === void 0 || exploreSymbols.length === 0 ? "No ranked symbols for this query. Answer from exactHits if present, or refine the question; do not start a multi-tool search loop." : "Exact hits plus Read-equivalent snippets, edges, and blast radius above answer this exploration. Answer now; do not call instant_grep, symbol_lookup, or code_graph_context unless you need lines beyond the snippets or a wider structure."
-        }, null, 2);
+          null,
+          2
+        );
       } catch (error51) {
         return {
           content: [{ type: "text", text: `codebase_query failed: ${String(error51)}` }],
@@ -19006,7 +19095,9 @@ async function plugin(bb) {
         "What you are trying to do. When seeds are omitted this is also the retrieval query, so phrase it as a question about the code."
       ),
       budgetTokens: external_exports.number().int().positive().optional().describe("Token budget. Omit to use the plugin setting."),
-      root: external_exports.string().optional().describe("Explicit server-local root. Omit to use the current thread workspace, including a remote environment.")
+      root: external_exports.string().optional().describe(
+        "Explicit server-local root. Omit to use the current thread workspace, including a remote environment."
+      )
     }),
     async execute({ seeds, query, budgetTokens, root: requestedRoot }, { threadId, projectId, signal }) {
       const root = await resolveRoot(projectId ?? null, requestedRoot ?? null, threadId, signal);
@@ -19124,24 +19215,35 @@ async function plugin(bb) {
     description: "Read a bounded project brief: fixed README and architecture overview files, package manager, declared test/typecheck/lint scripts, language mix, manifests, and AGENTS/CONTRIBUTING rules. It never reads .env or arbitrary agent-supplied files.",
     instructions: "Use this for a project overview, before choosing project commands, when rules may constrain an edit, or when the active repository is unclear. Treat its check names as candidates for verify_change, not permission to run arbitrary commands.",
     parameters: external_exports.object({
-      root: external_exports.string().optional().describe("Explicit server-local root. Omit to use the current thread workspace, including a remote environment.")
+      root: external_exports.string().optional().describe(
+        "Explicit server-local root. Omit to use the current thread workspace, including a remote environment."
+      )
     }),
     async execute({ root: requestedRoot }, { threadId, projectId, signal }) {
       const root = await resolveRoot(projectId ?? null, requestedRoot ?? null, threadId, signal);
       if (root === null) {
         return {
-          content: [{ type: "text", text: "No BB project repository is available. Open a project or pass `root` explicitly." }],
+          content: [
+            {
+              type: "text",
+              text: "No BB project repository is available. Open a project or pass `root` explicitly."
+            }
+          ],
           isError: true
         };
       }
       try {
         const ready = await ensureIndex(root, signal);
         const context = repositoryContexts.get(ready.root).context;
-        return JSON.stringify({
-          ...context,
-          summary: repositoryContextSummary(context),
-          note: "Only fixed root manifests, README.md, two named docs overview files, and AGENTS.md/CONTRIBUTING.md are read. Secret files and arbitrary paths are excluded."
-        }, null, 2);
+        return JSON.stringify(
+          {
+            ...context,
+            summary: repositoryContextSummary(context),
+            note: "Only fixed root manifests, README.md, two named docs overview files, and AGENTS.md/CONTRIBUTING.md are read. Secret files and arbitrary paths are excluded."
+          },
+          null,
+          2
+        );
       } catch (error51) {
         return {
           content: [{ type: "text", text: `repository_context failed: ${String(error51)}` }],
@@ -19156,28 +19258,39 @@ async function plugin(bb) {
     instructions: "Prefer codebase_query explore/trace for first discovery. Use this when you already know an exact symbol id or unique name and need definitions/direct references (full tool surface). For an edit, still call prechange_impact after resolving the target. A missing static reference is inconclusive when graph limitations apply.",
     parameters: external_exports.object({
       targets: external_exports.array(external_exports.string().min(1)).min(1).max(30).describe("Exact symbol ids, source-file paths, or a bare name only when it is unique."),
-      root: external_exports.string().optional().describe("Explicit server-local root. Omit to use the current thread workspace, including a remote environment.")
+      root: external_exports.string().optional().describe(
+        "Explicit server-local root. Omit to use the current thread workspace, including a remote environment."
+      )
     }),
     async execute({ targets, root: requestedRoot }, { threadId, projectId, signal }) {
       const root = await resolveRoot(projectId ?? null, requestedRoot ?? null, threadId, signal);
       if (root === null) {
         return {
-          content: [{ type: "text", text: "No BB project repository is available. Open a project or pass `root` explicitly." }],
+          content: [
+            {
+              type: "text",
+              text: "No BB project repository is available. Open a project or pass `root` explicitly."
+            }
+          ],
           isError: true
         };
       }
       try {
         const ready = await ensureIndex(root, signal);
         const report = lookupSymbols(ready.index, targets);
-        return JSON.stringify({
-          root: rootLabel(ready.root),
-          ...report,
-          graphCompleteness: ready.index.graphCompletenessReliable ? `>= ${(ready.index.graphCompleteness * 100).toFixed(0)}% of call edges (lower bound)` : "not estimable \u2014 too few overlapping resolution strategies",
-          ambiguousCalls: ready.index.ambiguousCalls,
-          ...inventoryLimitField(ready.root),
-          note: "Direct static references only. Reflection, dynamic dispatch, DI, generated code, and unparsed languages are outside the graph.",
-          next: report.ambiguous.length > 0 ? "Choose an exact symbol id or source-file path, then call again." : "Use prechange_impact before editing a resolved implementation target."
-        }, null, 2);
+        return JSON.stringify(
+          {
+            root: rootLabel(ready.root),
+            ...report,
+            graphCompleteness: ready.index.graphCompletenessReliable ? `>= ${(ready.index.graphCompleteness * 100).toFixed(0)}% of call edges (lower bound)` : "not estimable \u2014 too few overlapping resolution strategies",
+            ambiguousCalls: ready.index.ambiguousCalls,
+            ...inventoryLimitField(ready.root),
+            note: "Direct static references only. Reflection, dynamic dispatch, DI, generated code, and unparsed languages are outside the graph.",
+            next: report.ambiguous.length > 0 ? "Choose an exact symbol id or source-file path, then call again." : "Use prechange_impact before editing a resolved implementation target."
+          },
+          null,
+          2
+        );
       } catch (error51) {
         return {
           content: [{ type: "text", text: `symbol_lookup failed: ${String(error51)}` }],
@@ -19192,13 +19305,20 @@ async function plugin(bb) {
     instructions: "Use this BEFORE changing an implementation symbol or file once you know its exact path/id. Resolve any ambiguous target it returns; inspect every direct caller and test reference it reports. This is impact analysis, not search: no reported caller does not prove none exists \u2014 read its blindSpots before relying on an absence.",
     parameters: external_exports.object({
       targets: external_exports.array(external_exports.string()).min(1).describe("Exact symbol ids or source-file paths you intend to change. Bare names work only when unique."),
-      root: external_exports.string().optional().describe("Explicit server-local root. Omit to use the current thread workspace, including a remote environment.")
+      root: external_exports.string().optional().describe(
+        "Explicit server-local root. Omit to use the current thread workspace, including a remote environment."
+      )
     }),
     async execute({ targets, root: requestedRoot }, { threadId, projectId, signal }) {
       const root = await resolveRoot(projectId ?? null, requestedRoot ?? null, threadId, signal);
       if (root === null) {
         return {
-          content: [{ type: "text", text: "No BB project repository is available. Open a project or pass `root` explicitly." }],
+          content: [
+            {
+              type: "text",
+              text: "No BB project repository is available. Open a project or pass `root` explicitly."
+            }
+          ],
           isError: true
         };
       }
@@ -19297,13 +19417,20 @@ async function plugin(bb) {
     parameters: external_exports.object({
       targets: external_exports.array(external_exports.string().min(1)).min(1).max(30).describe("Exact symbol ids or source-file paths that were changed."),
       mode: external_exports.enum(["affected", "full"]).default("affected").describe("Affected passes recognized Vitest test files; full runs every declared check without filters."),
-      root: external_exports.string().optional().describe("Explicit server-local root. Omit to use the current thread workspace, including a remote environment.")
+      root: external_exports.string().optional().describe(
+        "Explicit server-local root. Omit to use the current thread workspace, including a remote environment."
+      )
     }),
     async execute({ targets, mode, root: requestedRoot }, { threadId, projectId, signal }) {
       const root = await resolveRoot(projectId ?? null, requestedRoot ?? null, threadId, signal);
       if (root === null) {
         return {
-          content: [{ type: "text", text: "No BB project repository is available. Open a project or pass `root` explicitly." }],
+          content: [
+            {
+              type: "text",
+              text: "No BB project repository is available. Open a project or pass `root` explicitly."
+            }
+          ],
           isError: true
         };
       }
@@ -19312,18 +19439,28 @@ async function plugin(bb) {
         const impact = analyzeImpact(ready.index, targets);
         if (impact.unresolved.length > 0 || impact.ambiguous.length > 0) {
           return {
-            content: [{
-              type: "text",
-              text: JSON.stringify({
-                error: "Verification stopped: every changed target must be exact.",
-                unresolved: impact.unresolved,
-                ambiguous: impact.ambiguous.map((entry) => ({
-                  requested: entry.requested,
-                  matches: entry.matches.map((match) => ({ id: match.id, file: match.file, line: match.startLine + 1 }))
-                })),
-                next: "Use a listed symbol id or exact source-file path, then call again."
-              }, null, 2)
-            }],
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(
+                  {
+                    error: "Verification stopped: every changed target must be exact.",
+                    unresolved: impact.unresolved,
+                    ambiguous: impact.ambiguous.map((entry) => ({
+                      requested: entry.requested,
+                      matches: entry.matches.map((match) => ({
+                        id: match.id,
+                        file: match.file,
+                        line: match.startLine + 1
+                      }))
+                    })),
+                    next: "Use a listed symbol id or exact source-file path, then call again."
+                  },
+                  null,
+                  2
+                )
+              }
+            ],
             isError: true
           };
         }
@@ -19334,17 +19471,21 @@ async function plugin(bb) {
           reason: "The workspace is remote. Verification commands are not run on the BB server because that could execute in a different checkout.",
           plan
         } : await runVerification(plan, { signal });
-        return JSON.stringify({
-          root: rootLabel(ready.root),
-          targets: impact.targets.map((target) => ({ id: target.id, file: target.file, line: target.startLine + 1 })),
-          testReferences: impact.testReferences,
-          verification,
-          blindSpots: {
-            graphCompleteness: ready.index.graphCompletenessReliable ? `>= ${(ready.index.graphCompleteness * 100).toFixed(0)}% of call edges (lower bound)` : "not estimable \u2014 too few overlapping resolution strategies",
-            ...inventoryLimitField(ready.root),
-            notProven: "Passing declared checks does not prove reflection, dynamic dispatch, DI, generated code, or unparsed languages are safe."
-          }
-        }, null, 2);
+        return JSON.stringify(
+          {
+            root: rootLabel(ready.root),
+            targets: impact.targets.map((target) => ({ id: target.id, file: target.file, line: target.startLine + 1 })),
+            testReferences: impact.testReferences,
+            verification,
+            blindSpots: {
+              graphCompleteness: ready.index.graphCompletenessReliable ? `>= ${(ready.index.graphCompleteness * 100).toFixed(0)}% of call edges (lower bound)` : "not estimable \u2014 too few overlapping resolution strategies",
+              ...inventoryLimitField(ready.root),
+              notProven: "Passing declared checks does not prove reflection, dynamic dispatch, DI, generated code, or unparsed languages are safe."
+            }
+          },
+          null,
+          2
+        );
       } catch (error51) {
         return {
           content: [{ type: "text", text: `verify_change failed: ${String(error51)}` }],
@@ -19396,10 +19537,7 @@ async function plugin(bb) {
           }
         }
         await new Promise((resolve) => {
-          const timer = setTimeout(
-            resolve,
-            config2.refreshIntervalSeconds * 1e3
-          );
+          const timer = setTimeout(resolve, config2.refreshIntervalSeconds * 1e3);
           signal.addEventListener("abort", () => {
             clearTimeout(timer);
             resolve();
@@ -19492,9 +19630,7 @@ async function plugin(bb) {
     if (indexShapeChanged) {
       for (const entry of indexes.list()) {
         void indexes.refresh(entry.root, () => rebuildIndex(entry.root)).then((ready) => refreshRepositoryContext(ready)).catch((error51) => {
-          bb.log.warn(
-            `could not apply settings to ${entry.root}: ${String(error51)}`
-          );
+          bb.log.warn(`could not apply settings to ${entry.root}: ${String(error51)}`);
         });
       }
     }
@@ -19642,16 +19778,14 @@ async function plugin(bb) {
         const outcomes = db.prepare(`SELECT COUNT(*) AS n FROM outcomes`).get();
         const rate = db.prepare(`SELECT AVG(recall) AS r FROM outcomes WHERE recall IS NOT NULL`).get();
         const all = indexes.list();
-        const rows = all.map(
-          (entry) => {
-            const inventory = remoteInventories.get(entry.root);
-            return [
-              entry.root,
-              `  symbols: ${entry.index.symbols.length}, edges: ${entry.edgeCount}, completeness: >= ${(entry.index.graphCompleteness * 100).toFixed(1)}%`,
-              ...inventory === void 0 ? [] : [`  ${formatRemoteInventory(inventory)}`]
-            ].join("\n");
-          }
-        );
+        const rows = all.map((entry) => {
+          const inventory = remoteInventories.get(entry.root);
+          return [
+            entry.root,
+            `  symbols: ${entry.index.symbols.length}, edges: ${entry.edgeCount}, completeness: >= ${(entry.index.graphCompleteness * 100).toFixed(1)}%`,
+            ...inventory === void 0 ? [] : [`  ${formatRemoteInventory(inventory)}`]
+          ].join("\n");
+        });
         return {
           exitCode: 0,
           stdout: `indexes: ${all.length}
@@ -19698,10 +19832,7 @@ async function plugin(bb) {
 ` };
         }
         const rootFlag = rest.indexOf("--root");
-        const root = await resolveRoot(
-          ctx.projectId ?? null,
-          rootFlag >= 0 ? rest[rootFlag + 1] ?? null : null
-        );
+        const root = await resolveRoot(ctx.projectId ?? null, rootFlag >= 0 ? rest[rootFlag + 1] ?? null : null);
         if (root === null) {
           return { exitCode: 2, stderr: "could not resolve a repository root\n" };
         }
@@ -19781,7 +19912,12 @@ async function plugin(bb) {
 `
           };
         }
-        const cliSymbols = await attachSnippets(ready.root, result.symbols, BODY_LINE_LIMIT, remoteSources.get(ready.root));
+        const cliSymbols = await attachSnippets(
+          ready.root,
+          result.symbols,
+          BODY_LINE_LIMIT,
+          remoteSources.get(ready.root)
+        );
         const lines = result.symbols.map((symbol2) => {
           const head = `  ${symbol2.file}:${symbol2.startLine + 1}  ${symbol2.name}  (${symbol2.tokens}t)`;
           const parts = symbol2.components;
@@ -19796,7 +19932,10 @@ ${lines.join("\n")}
 ` + formatBlastRadius(result.blastRadius) + formatEdges(result.edges) + formatBoundaries(boundariesIn(cliSymbols))
         };
       }
-      return { exitCode: 2, stderr: "usage: bb code-intelligence <status|feedback|instruction|index|context|export|import>\n" };
+      return {
+        exitCode: 2,
+        stderr: "usage: bb code-intelligence <status|feedback|instruction|index|context|export|import>\n"
+      };
     }
   });
   bb.onDispose(() => {

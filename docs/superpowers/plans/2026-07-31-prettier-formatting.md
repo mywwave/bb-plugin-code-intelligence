@@ -13,7 +13,7 @@
 - Pin Prettier exactly at version `3.8.3`; do not add Husky, lint-staged, or a CI workflow.
 - Preserve double quotes, semicolons, trailing commas, and a 120-column print width.
 - `npm run format` may rewrite supported source files; `npm run format:check` and `npm run check` must never rewrite them.
-- Exclude `dist/`, `node_modules/`, `coverage/`, and `bench/results/` from Prettier.
+- Exclude `dist/`, `node_modules/`, `coverage/`, and `bench/results/` from direct Prettier formatting; commit a deterministic `dist/` refresh if rebuilding formatted source changes it.
 - The one-time formatting diff must remain mechanical and contain no behavioral edits.
 
 ---
@@ -26,6 +26,7 @@
 - Modify `package-lock.json`: npm-resolved lock entry for Prettier 3.8.3.
 - Modify supported source, test, script, JSON, YAML, and Markdown files: one-time mechanical formatting only.
 - Modify `CONTRIBUTING.md`: contributor commands and formatting-gate behavior.
+- Modify `dist/server.js` only if the plugin builder deterministically refreshes the committed artifact after source formatting.
 
 ### Task 1: Prettier dependency, commands, and repository formatting
 
@@ -205,7 +206,7 @@ Run:
 npm run check
 ```
 
-Expected: formatting check, TypeScript typecheck, Vitest, plugin build, release verification, and clean-dist verification all pass.
+Expected: formatting check, TypeScript typecheck, Vitest, plugin build, and release verification pass. If clean-dist reports a deterministic `dist/server.js` refresh caused by formatted source, review and include that generated artifact in Step 5; do not run Prettier over it directly.
 
 - [ ] **Step 4: Confirm generated output and working-tree scope**
 
@@ -217,12 +218,12 @@ git diff -- dist/
 git status --short
 ```
 
-Expected: no whitespace errors, no `dist/` changes, and only the intended documentation update remains unstaged.
+Expected: no whitespace errors, and only the intended documentation update plus any reviewed deterministic `dist/server.js` refresh remain unstaged.
 
 - [ ] **Step 5: Commit contributor documentation**
 
 ```bash
-git add CONTRIBUTING.md
+git add CONTRIBUTING.md dist/server.js docs/superpowers/specs/2026-07-31-prettier-formatting-design.md docs/superpowers/plans/2026-07-31-prettier-formatting.md
 git commit -m "docs: document prettier workflow"
 ```
 

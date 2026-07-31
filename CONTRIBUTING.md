@@ -18,11 +18,12 @@ From a fresh clone:
 npm ci && npm run check
 ```
 
-`npm run check` is the required local gate. It runs type checking, the Vitest
-suite, builds the managed-install plugin artifact, copies parser assets, and
-validates the release artifact. GitHub Actions are intentionally not required
-for this repository. If it reports that `dist/` differs, review and commit the
-generated artifact before opening a pull request.
+`npm run check` is the required local gate. It verifies Prettier formatting,
+runs type checking and the Vitest suite, builds the managed-install plugin
+artifact, copies parser assets, and validates the release artifact. GitHub
+Actions are intentionally not required for this repository. If it reports that
+`dist/` differs, review and commit the generated artifact before opening a pull
+request.
 
 To run the same gate before each push, opt in to the managed hook:
 
@@ -35,10 +36,20 @@ the managed hook manually if you no longer want it.
 
 ## Development workflow
 
+Format all supported source and documentation files before validation:
+
+```bash
+npm run format
+```
+
+`npm run format:check` reports formatting drift without modifying files.
+Generated release output under `dist/` and benchmark evidence under
+`bench/results/` are excluded from source formatting.
+
 1. Create a focused branch from current `main`.
 2. Change source under `src/` or the plugin entrypoint `server.ts`.
 3. Add or update a focused test under `test/` before changing behavior.
-4. Run the smallest relevant test, then `npm run check`.
+4. Run `npm run format`, the smallest relevant test, then `npm run check`.
 5. Review `git diff -- dist/`. Commit generated `dist/` files only when the
    build changed them; never commit source maps, credentials, local BB data,
    or `node_modules/`.

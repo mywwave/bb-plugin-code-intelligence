@@ -26,7 +26,7 @@ Prettier will discover supported files from the repository root. This covers sou
 
 `.prettierignore` will exclude content that is generated, external, or unsuitable for source formatting:
 
-- `dist/` because it is rebuilt and validated as a committed release artifact;
+- `dist/` because it is rebuilt and validated as a committed release artifact rather than formatted directly;
 - `node_modules/` and `coverage/` because they are dependency/test output;
 - `bench/results/` because benchmark reports and machine-generated result data are immutable evidence artifacts.
 
@@ -42,6 +42,8 @@ Implementation will update:
 - `CONTRIBUTING.md` to document `npm run format` and the formatting gate;
 - all currently in-scope files once, using `npm run format`.
 
+If source formatting changes the deterministic output of the plugin builder, the regenerated `dist/` artifact will be reviewed and committed without running Prettier over it directly.
+
 The one-time formatting pass may produce a broad mechanical diff. It must not include behavioral edits.
 
 ## Verification and failure behavior
@@ -51,6 +53,6 @@ Implementation is complete when:
 1. `npm run format:check` passes on the formatted tree.
 2. A deliberately misformatted temporary supported file makes `npm run format:check` fail, and `npm run format` repairs it.
 3. `npm run check` passes, including typechecking, tests, plugin build, and release-artifact validation.
-4. `git diff -- dist/` is empty after the full gate, proving source formatting does not fight the generated artifact build.
+4. Any deterministic `dist/` refresh caused by the source pass is committed, and a subsequent full gate leaves `git diff -- dist/` empty.
 
 If the initial formatting pass exposes syntax Prettier cannot parse, implementation stops and narrows the cause rather than adding a broad ignore rule. Generated paths are the only planned exclusions.
