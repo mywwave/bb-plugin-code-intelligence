@@ -23,11 +23,39 @@ export interface CodeGraphConfig {
    *   off      — no instruction at all; the tool competes on registration alone
    */
   readonly instructionStyle: InstructionStyle;
+  /**
+   * Which registered tools `configure()` advertises to the next provider session.
+   *
+   *   lean — one-shot navigation + edit gate (production default)
+   *   full — every registered Code Intelligence tool, including structural extras
+   */
+  readonly toolSurface: ToolSurface;
 }
 
 export type InstructionStyle = "playbook" | "budget" | "short" | "off";
+export type ToolSurface = "lean" | "full";
 
 const INSTRUCTION_STYLES: readonly InstructionStyle[] = ["playbook", "budget", "short", "off"];
+const TOOL_SURFACES: readonly ToolSurface[] = ["lean", "full"];
+
+/** Default lean set: discovery one-shot plus edit gate/verify. */
+export const LEAN_AGENT_TOOLS = [
+  "codebase_query",
+  "instant_grep",
+  "prechange_impact",
+  "verify_change",
+] as const;
+
+/** Full set: lean tools plus structural/orientation extras. */
+export const FULL_AGENT_TOOLS = [
+  "instant_grep",
+  "codebase_query",
+  "code_graph_context",
+  "repository_context",
+  "symbol_lookup",
+  "prechange_impact",
+  "verify_change",
+] as const;
 
 export type CodeGraphConfigPatch = Partial<CodeGraphConfig>;
 
@@ -42,6 +70,7 @@ export const DEFAULT_CODE_GRAPH_CONFIG: CodeGraphConfig = Object.freeze({
   useCochange: true,
   defaultBudgetTokens: 4_000,
   instructionStyle: "playbook",
+  toolSurface: "lean",
 });
 
 const LIMITS = {
@@ -112,12 +141,19 @@ export function normalizeCodeGraphConfig(value: unknown): CodeGraphConfig {
     )
       ? (source.instructionStyle as InstructionStyle)
       : DEFAULT_CODE_GRAPH_CONFIG.instructionStyle,
+    toolSurface: TOOL_SURFACES.includes(source.toolSurface as ToolSurface)
+      ? (source.toolSurface as ToolSurface)
+      : DEFAULT_CODE_GRAPH_CONFIG.toolSurface,
     defaultBudgetTokens: integerValue(
       source.defaultBudgetTokens,
       DEFAULT_CODE_GRAPH_CONFIG.defaultBudgetTokens,
       ...LIMITS.defaultBudgetTokens,
     ),
   };
+}
+
+export function agentToolsForSurface(surface: ToolSurface): readonly string[] {
+  return surface === "full" ? FULL_AGENT_TOOLS : LEAN_AGENT_TOOLS;
 }
 
 export function mergeCodeGraphConfig(

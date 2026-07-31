@@ -60,6 +60,7 @@ import {
   type RemoteInventory,
 } from "./src/remote-inventory.js";
 import {
+  agentToolsForSurface,
   mergeCodeGraphConfig,
   normalizeCodeGraphConfig,
   type CodeGraphConfig,
@@ -103,6 +104,7 @@ const configSchema = z.object({
   defaultBudgetTokens: z.number().int().min(256).max(32_000),
   // An A/B knob, exposed so the two instruction changes can be measured apart.
   instructionStyle: z.enum(["playbook", "budget", "short", "off"]),
+  toolSurface: z.enum(["lean", "full"]),
 });
 
 const configPatchSchema = configSchema.partial().strict();
@@ -746,21 +748,17 @@ export default async function plugin(bb: BbPluginApi) {
     description:
       "Fast literal or regex search over the active workspace. It uses ripgrep for an explicit " +
       "server-local root and a BB host-file snapshot for a thread environment. " +
-      "Use it first for exact locations, error strings, imports, and regex patterns; for a known " +
-      "identifier's direct caller/callee/delegation, use codebase_query mode trace first. It " +
-      "returns matching file/line locations without an LLM or graph-index lookup.",
+      "Use for pure location/existence questions (identifiers, error strings, imports, regexes). " +
+      "For exploratory how/where questions or a known identifier's direct relation, prefer " +
+      "codebase_query once instead. Returns matching file/line locations without an LLM lookup.",
     instructions:
-      "This is the primary exact-location search tool. For a known identifier's direct caller, callee, " +
-      "or delegation, do not call this first: call codebase_query with mode trace once instead. Search " +
-      "exact identifiers, strings, imports, " +
-      "and regexes here before using structural analysis. Use `regex: true` for patterns " +
-      "such as `import.*PaymentService`, `word: true` for whole identifiers, and a glob " +
-      "to narrow large searches. Omit `root` unless the user explicitly supplies another " +
-      "workspace: the default is the active BB project, and remembered paths may be stale. " +
-      "Use `patterns` to batch independent queries with shared options. `content` returns exact " +
-      "lines plus optional context; `files_with_matches` and `count` are cheaper summaries. " +
-      "For a pure location answer, cite a content hit directly rather than opening the file. " +
-      "It stops at `limit`; use nextOffset or refine the pattern/glob before reading files.",
+      "Use for pure exact-location answers only. Skip when the prompt already has enough context. " +
+      "For exploratory questions or a known identifier's direct caller/callee/delegation, call " +
+      "codebase_query once instead — do not chain this after explore. Use `regex: true` for patterns " +
+      "such as `import.*PaymentService`, `word: true` for whole identifiers, and a glob to narrow " +
+      "large searches. Omit `root` unless the user explicitly supplies another workspace. " +
+      "Use `patterns` to batch independent queries. For a pure location answer, cite a content hit " +
+      "and stop. It stops at `limit`; refine pattern/glob or use nextOffset before reading files.",
     parameters: z.object({
       pattern: z.string().min(1).max(1_000).optional().describe("One literal text pattern by default, or a regex when regex is true."),
       patterns: z.array(z.string().min(1).max(1_000)).min(1).max(10).optional().describe("Independent patterns with the same search options; use instead of pattern to save tool calls."),
@@ -821,7 +819,7 @@ export default async function plugin(bb: BbPluginApi) {
         const next = (result: typeof results[number]) => result.truncated
           ? "Refine pattern/glob or call again with nextOffset before treating this search as exhaustive."
           : outputMode === "content"
-            ? "For a pure location/existence answer, cite this exact hit directly. Use code_graph_context only for structural questions."
+            ? "For a pure location/existence answer, cite this exact hit and stop. Do not open the file or chain structural tools unless you need lines beyond this hit."
             : "Use content mode on a selected file only when you need source lines.";
         return JSON.stringify(
           searchPatterns.length === 1
@@ -842,13 +840,17 @@ export default async function plugin(bb: BbPluginApi) {
   bb.agents.registerTool({
     name: "codebase_query",
     description:
-      "Explore a codebase from a natural-language question in one bounded call. It combines " +
-      "a few deterministic exact workspace searches with graph-ranked symbols; no LLM runs inside it.",
+      "PRIMARY one-shot navigation for exploratory how/where questions and known-ID relations. " +
+      "Explore mode is Read-equivalent: exact hits plus ranked symbol snippets (line-numbered), " +
+      "call edges, blast radius, and dynamicBoundaries in one capped call — treat snippets as " +
+      "already Read. Trace mode returns exact source context and direct static relations for a " +
+      "known identifier. No LLM runs inside it.",
     instructions:
-      "Use this as the first tool for an exploratory question when you do not yet know an exact " +
-      "identifier or file. It returns exact hits plus ranked entry points. For a known identifier and " +
-      "only its direct caller, callee, or delegation, use mode trace first without instant_grep: one call returns its exact source " +
-      "context and direct static relations. For a pure location or literal question, use instant_grep instead.",
+      "Call once for an exploratory question or a known identifier's direct caller/callee/delegation " +
+      "(mode trace). Skip when the prompt already has enough context. Explore returns Read-equivalent " +
+      "snippets + edges + blast radius — answer from that payload; do not follow with instant_grep, " +
+      "symbol_lookup, or code_graph_context unless you need lines beyond the snippets. For a pure " +
+      "location or literal question with no structural need, use instant_grep instead.",
     parameters: z.object({
       query: z.string().min(3).max(1_000).describe("Natural-language question about the codebase. Include an identifier in backticks when you know one."),
       explanation: z.string().min(8).max(300).describe("Why this bounded exploration or direct-relation trace fits the question."),
@@ -868,7 +870,7 @@ export default async function plugin(bb: BbPluginApi) {
         const indexStartedAt = performance.now();
         const ready = await ensureIndex(root, signal);
         const indexMs = performance.now() - indexStartedAt;
-        const effectiveBudget = budgetTokens ?? Math.min(config.defaultBudgetTokens, 1_024);
+        const effectiveBudget = budgetTokens ?? config.defaultBudgetTokens;
         const result = await queryCodebase(ready.root, ready.index, {
           query,
           mode,
@@ -878,6 +880,11 @@ export default async function plugin(bb: BbPluginApi) {
         });
         const context = result.context;
         const trace = result.trace;
+        const exploreSymbols = context === undefined
+          ? undefined
+          : config.includeSnippets
+            ? await attachSnippets(ready.root, context.symbols, BODY_LINE_LIMIT, remoteSources.get(ready.root))
+            : context.symbols;
         if (typeof threadId === "string") {
           await recordFeedbackAnswer({
             threadId,
@@ -902,24 +909,58 @@ export default async function plugin(bb: BbPluginApi) {
           mode: result.mode,
           patterns: result.patterns,
           exactHits: result.exactMatches.slice(0, 12),
-          ...(context === undefined ? {} : { symbols: context.symbols.slice(0, 12).map((symbol) => ({
-            id: symbol.id,
-            file: symbol.file,
-            lines: [symbol.startLine + 1, symbol.endLine + 1],
-            via: symbol.via,
-          })) }),
-          ...(context === undefined ? {} : { graphFiles: context.files.slice(0, 12) }),
+          ...(exploreSymbols === undefined ? {} : {
+            symbols: exploreSymbols.slice(0, 12).map((symbol) => ({
+              id: symbol.id,
+              file: symbol.file,
+              lines: [symbol.startLine + 1, symbol.endLine + 1],
+              tokens: symbol.tokens,
+              via: symbol.via,
+              ...(config.includeSnippets ? { snippet: symbol.snippet ?? "" } : {}),
+            })),
+            tokensUsed: context!.tokensUsed,
+            budgetTokens: effectiveBudget,
+            dynamicBoundaries: boundariesIn(exploreSymbols).map((boundary) => ({
+              at: `${boundary.file}:${boundary.line}`,
+              form: boundary.form,
+              ...(boundary.key === undefined ? {} : { key: boundary.key }),
+            })),
+            edges: context!.edges.map((edge) => ({
+              from: edge.from,
+              to: edge.to,
+              via: edge.via,
+            })),
+            blastRadius: context!.blastRadius.map((entry) => ({
+              symbol: entry.id,
+              at: `${entry.file}:${entry.startLine + 1}`,
+              callers: entry.callers,
+              callerFiles: entry.callerFiles,
+              ...(entry.testFiles.length > 0
+                ? { tests: entry.testFiles }
+                : { tests: [], warning: "no covering tests found" }),
+            })),
+            graphFiles: context!.files.slice(0, 12),
+          }),
           ...(trace === undefined ? {} : { trace: trace.symbols }),
           graphCompleteness: ready.index.graphCompletenessReliable
             ? `>= ${(ready.index.graphCompleteness * 100).toFixed(0)}%`
             : "not estimable — too few edges were found by more than one strategy",
           ...inventoryLimitField(ready.root),
           timingMs: { index: indexMs, ...result.timingMs },
+          ...(result.mode === "explore" && config.includeSnippets
+            ? {
+                note:
+                  "Snippets are truncated bodies — treat them as already Read. Open a file only when you need lines beyond them. " +
+                  "graphCompleteness is a lower bound; reflection and dynamic dispatch are invisible to static analysis.",
+              }
+            : {}),
           next: result.mode === "trace"
             ? trace?.symbols.length === 0
               ? "No indexed definition enclosed an exact hit. Refine the identifier or use instant_grep; an empty trace is not proof of no relation."
               : "The exact definition and direct relation above answer this trace. Answer now; do not call instant_grep or code_graph_context unless the user asks for source beyond this result or a wider structure."
-            : "Choose an exact hit or symbol from this response. Use instant_grep for a narrower exact follow-up, then symbol_lookup or code_graph_context for structure.",
+            : exploreSymbols === undefined || exploreSymbols.length === 0
+              ? "No ranked symbols for this query. Answer from exactHits if present, or refine the question; do not start a multi-tool search loop."
+              : "Exact hits plus Read-equivalent snippets, edges, and blast radius above answer this exploration. Answer now; do not call instant_grep, symbol_lookup, or code_graph_context unless you need lines beyond the snippets or a wider structure.",
         }, null, 2);
       } catch (error) {
         return {
@@ -945,12 +986,11 @@ export default async function plugin(bb: BbPluginApi) {
      * more than saying everything twice, so this stays the short form.
      */
     instructions:
-      "Use instant_grep for exact text and regex discovery. Use this after you have a " +
-      "symbol/file hit and need structural context, callers, tests, or static-analysis " +
-      "limits; do not call it for a pure location, existence, or exact test-hit answer. " +
-      "Treat returned snippets as already read — do not re-open them unless you " +
-      "need lines beyond the snippet. Before concluding a symbol has no callers, read " +
-      "graphCompleteness and dynamicBoundaries: a missing edge is not an absent one.",
+      "Prefer codebase_query explore/trace for first discovery — it is already Read-equivalent. " +
+      "Use this only when you already have seeds and need a deeper structural pass (full tool surface), " +
+      "or when explore snippets are insufficient. Do not call it for a pure location, existence, or " +
+      "exact test-hit answer. Treat returned snippets as already read. Before concluding a symbol has " +
+      "no callers, read graphCompleteness and dynamicBoundaries: a missing edge is not an absent one.",
     parameters: z.object({
       seeds: z
         .array(z.string())
@@ -1155,9 +1195,10 @@ export default async function plugin(bb: BbPluginApi) {
       "Deterministic go-to-definition and direct static reference lookup for exact symbol ids, " +
       "source files, or a unique name. It reports ambiguity instead of guessing.",
     instructions:
-      "Use after instant_grep finds a symbol or file and you need exact definitions, direct callers, " +
-      "or test references. For an edit, still call prechange_impact after resolving the target. " +
-      "A missing static reference is inconclusive when graph limitations apply.",
+      "Prefer codebase_query explore/trace for first discovery. Use this when you already know an " +
+      "exact symbol id or unique name and need definitions/direct references (full tool surface). " +
+      "For an edit, still call prechange_impact after resolving the target. A missing static " +
+      "reference is inconclusive when graph limitations apply.",
     parameters: z.object({
       targets: z.array(z.string().min(1)).min(1).max(30).describe("Exact symbol ids, source-file paths, or a bare name only when it is unique."),
       root: z.string().optional().describe("Explicit server-local root. Omit to use the current thread workspace, including a remote environment."),
@@ -1494,10 +1535,8 @@ export default async function plugin(bb: BbPluginApi) {
     },
   });
 
-  // Nudges the agent toward calling the tool at all. Runs synchronously on the
-  // thread-start path, so it only reads state already in memory — no indexing,
-  // no I/O. Returns null until an index exists, because advertising a tool that
-  // can only fail teaches the model to distrust it.
+  // Routing playbook for ordinary threads. Side-chat does not see this path;
+  // configure() carries the same text so both surfaces stay aligned.
   bb.agents.contributeInstructions(({ projectId }) => {
     const root = rootsByProject.get(projectId) ?? null;
     return buildInstruction(
@@ -1507,22 +1546,24 @@ export default async function plugin(bb: BbPluginApi) {
     );
   });
 
-  // Make every first-class plugin capability available on the next provider
-  // session. This is a stronger plugin-only preference than a prose hint, but
-  // intentionally not presented as enforcement: plugins cannot intercept an
-  // agent's arbitrary shell command.
-  bb.agents.configure(() => ({
-    tools: [
-      "instant_grep",
-      "codebase_query",
-      "code_graph_context",
-      "repository_context",
-      "symbol_lookup",
-      "prechange_impact",
-      "verify_change",
-    ],
-    skills: [],
-  }));
+  // Prefer a lean tool set by default so one-shot explore is not drowned by
+  // structural extras. Instructions here also reach side-chat threads (which
+  // never see contributeInstructions).
+  bb.agents.configure(({ project, sideChat }) => {
+    const root = rootsByProject.get(project.id) ?? null;
+    const instructions = buildInstruction(
+      root === null ? null : summaryOf(indexes.get(root), rootLabel),
+      config.instructionStyle,
+      root === null ? undefined : repositoryContexts.get(root)?.context && repositoryContextSummary(repositoryContexts.get(root)!.context),
+    );
+    return {
+      tools: [...agentToolsForSurface(config.toolSurface)],
+      skills: [],
+      // Side-chat only: ordinary threads already receive the playbook via
+      // contributeInstructions; duplicating it here would bloat the prompt.
+      ...(sideChat && instructions !== null ? { instructions } : {}),
+    };
+  });
 
   // The feedback loop. Record-only: nothing here changes ranking yet. The data
   // is worthless if collection starts later, and dangerous if it starts driving
@@ -1681,6 +1722,16 @@ export default async function plugin(bb: BbPluginApi) {
     commands: [
       { name: "status", summary: "Index and feedback statistics", usage: "bb code-intelligence status" },
       {
+        name: "instruction",
+        summary: "Get or set the agent instruction style (playbook|budget|short|off)",
+        usage: "bb code-intelligence instruction [playbook|budget|short|off]",
+      },
+      {
+        name: "tool-surface",
+        summary: "Get or set the advertised agent tool set (lean|full)",
+        usage: "bb code-intelligence tool-surface [lean|full]",
+      },
+      {
         name: "feedback",
         summary: "Compare shell-search continuation and recall by plugin search surface",
         usage: "bb code-intelligence feedback [--json]",
@@ -1733,6 +1784,25 @@ export default async function plugin(bb: BbPluginApi) {
         });
         await bb.storage.kv.set(CONFIG_KEY, config);
         return { exitCode: 0, stdout: `instructionStyle = ${value}\n` };
+      }
+
+      if (command === "tool-surface") {
+        const [value] = rest;
+        const allowed = ["lean", "full"];
+        if (value === undefined) {
+          return { exitCode: 0, stdout: `${config.toolSurface}\n` };
+        }
+        if (!allowed.includes(value)) {
+          return {
+            exitCode: 2,
+            stderr: `tool-surface must be one of: ${allowed.join(", ")}\n`,
+          };
+        }
+        config = mergeCodeGraphConfig(config, {
+          toolSurface: value as CodeGraphConfig["toolSurface"],
+        });
+        await bb.storage.kv.set(CONFIG_KEY, config);
+        return { exitCode: 0, stdout: `toolSurface = ${value}\n` };
       }
 
       if (command === "status") {

@@ -50,11 +50,16 @@ unreleased commits may track the repository's `main` branch instead.
 
 | Question shape | Native tool | Result |
 | --- | --- | --- |
-| Known identifier, string, import, or regex | `instant_grep` | Exact file/line hits, glob filtering, context, and paging. |
-| “Where/how is this handled?” with no exact target | `codebase_query` | Bounded exploration: exact evidence plus ranked entry files. |
+| Enough source already in the prompt | *(none)* | Answer; skip discovery. |
+| Known identifier, string, import, or regex (location only) | `instant_grep` | Exact file/line hits, glob filtering, context, and paging. |
+| “Where/how is this handled?” with no exact target | `codebase_query` | Read-equivalent one-shot: exact hits, snippets, edges, blast radius. |
 | Known identifier, direct caller/callee/delegation | `codebase_query` with `mode: "trace"` | Exact source context and direct static relations in one call. |
-| Known symbol/file, need callers or tests | `symbol_lookup`, `code_graph_context` | Definitions, static relationships, tests, and stated graph limits. |
+| Known symbol/file, need deeper callers or tests (full surface) | `symbol_lookup`, `code_graph_context` | Definitions, static relationships, tests, and stated graph limits. |
 | Before or after an implementation edit | `prechange_impact`, `verify_change` | Direct impact and declared verification checks. |
+
+Default agent surface is **lean** (`codebase_query`, `instant_grep`,
+`prechange_impact`, `verify_change`). Use `bb code-intelligence tool-surface full`
+when structural extras are needed.
 
 `repository_context` provides allowlisted repository orientation and declared
 checks. The current BB thread environment is authoritative: remote workspaces

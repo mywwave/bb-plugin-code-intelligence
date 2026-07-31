@@ -65,3 +65,13 @@ event-timeline diagnostics, and thread identifiers; they exclude prompts,
 source snippets, hidden reasoning, and local filesystem paths. Earlier
 [v3](2026-07-31-agent-value-v3.md) and [v2](2026-07-31-agent-value-v2.md)
 results remain historical one-hop evidence and must not be pooled with v4.
+
+## Next measurement (post lean one-shot)
+
+Re-run v4 after lean one-shot explore with arms
+`baseline_without_plugin` / `plugin_lean_oneshot` (optional `plugin_full`),
+plus a **context-already-present** arm. Success criteria are documented in
+[BENCHMARK.md](../../docs/BENCHMARK.md): correctness preserved, median event
+timeline not worse than baseline, ≥40% turns with ≤1 discovery, and ≥70%
+zero-discovery on context-already-present. Do not claim a speedup from this
+v4 baseline alone.

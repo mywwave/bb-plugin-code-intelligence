@@ -30,12 +30,10 @@ describe("buildInstruction", () => {
     expect(text).toContain("15,539");
     expect(text).toContain("62%");
     expect(text).toContain("instant_grep");
-    expect(text).toContain("primary exact search");
-    expect(text).toContain("import.*Service");
-    expect(text).toMatch(/pure\s+location or existence question/);
+    expect(text).toContain("Skip when context is already present");
+    expect(text).toContain("Read-equivalent");
     expect(text).toMatch(/already read/i);
     expect(text).toContain("snippets");
-    // And it must still say where grep remains the right tool.
     expect(text).toContain("literal strings");
   });
 
@@ -68,6 +66,7 @@ describe("buildInstruction", () => {
     })!;
 
     expect(text).toMatch(/Graph budget: at most 3 `code_graph_context` calls/);
+    expect(text).toMatch(/At most 2 native discovery calls/);
   });
 
   it("scales the budget with the repository, and never below one call", () => {
@@ -91,14 +90,16 @@ describe("buildInstruction", () => {
     expect(text.length).toBeLessThan(4096);
   });
 
-  it("keeps instant grep as the concise discovery path", () => {
+  it("keeps discovery stop rules in the concise arm", () => {
     const control = buildInstruction(
       { root: "/repo", symbols: 15539, graphCompleteness: 0.616, graphCompletenessReliable: true },
       "short",
     )!;
 
-    expect(control).toContain("instant_grep is primary exact search");
-    expect(control.length).toBeLessThan(600);
+    expect(control).toContain("Skip discovery when the prompt already has enough source/context");
+    expect(control).toContain("Discovery budget: at most 2 native discovery calls");
+    expect(control).toContain("Read-equivalent");
+    expect(control.length).toBeLessThan(800);
     expect(control).not.toMatch(/Budget:/);
   });
 
@@ -108,12 +109,11 @@ describe("buildInstruction", () => {
       "short",
     )!;
 
-    expect(text).toContain("answer locations from its hits");
-    expect(text).toContain("symbol_lookup");
-    expect(text).toContain("Overview/rules/checks → repository_context");
+    expect(text).toContain("answer from its hits");
     expect(text).toContain("Exact edit → prechange_impact before; verify_change after");
     expect(text).toContain("Do not repeat quoted hits");
-    expect(text).toContain("No terminal rg/grep/find unless it errors");
+    expect(text).toContain("No terminal rg/grep/find unless a native tool errors");
+    expect(text).not.toContain("Hit → symbol_lookup");
   });
 
   it("routes a known identifier relationship through one trace query", () => {
@@ -122,7 +122,7 @@ describe("buildInstruction", () => {
       "short",
     )!;
 
-    expect(text).toContain("Known ID relation → codebase_query trace first, never instant_grep first");
+    expect(text).toContain("Known ID relation → codebase_query trace once; never instant_grep first");
   });
 
   it("adds a graph-only budget to the concise arm", () => {

@@ -42,6 +42,47 @@ also retain the returned plugin-only `timingMs` breakdown (`index`, exact
 search, graph work, total); it excludes model/provider latency and must not be
 combined with full-turn time.
 
+## Speed KPIs (agent-value-v4)
+
+v4 is the primary speed and multi-hop routing protocol. Keep the same BB host,
+provider, model, reasoning level, fixture commits, and permission mode as the
+published [v4 diagnostic baseline](../bench/results/2026-07-31-agent-value-v4.md)
+(BB `0.34`, `gpt-5.6-sol`, reasoning `low`). Do not invent a parallel harness.
+
+| KPI | How to measure | Success bar (do not claim until measured) |
+| --- | --- | --- |
+| Correctness | Expected path + required final-answer terms | Preserved vs baseline |
+| Round-trips | Discovery ops; share of turns with ≤1 native discovery call | ≥40% of navigation turns ≤1 discovery |
+| Wall-clock | Median `item/started` → `item/completed` event timeline + runner elapsed | Not worse than baseline (~18 s median timeline; must-fix the prior +51% regression) |
+| No-redundant | New **context-already-present** arm (below) | ≥70% of those turns with 0 discovery calls |
+
+### Arms
+
+1. **baseline** — no Code Intelligence plugin installed.
+2. **enabled-lean-oneshot** — plugin at the candidate revision; `toolSurface lean`
+   (default), playbook instructions, one-shot explore payload.
+3. **enabled-full** (optional) — same revision with `toolSurface full`.
+
+Set the lean surface before enabled-lean threads:
+
+```bash
+bb code-intelligence instruction playbook
+bb code-intelligence tool-surface lean
+```
+
+### Context-already-present arm
+
+Add a small diagnostic set (may reuse v4 fixtures) where the prompt already
+includes a sufficient source snippet or relation evidence to answer. Expected
+behavior: **0** `codebase_query` / `instant_grep` / shell discovery calls; the
+agent answers from the provided context. Record discovery counts the same way
+as v4. This arm validates the skip-if-context playbook rule; it is not a
+latency claim by itself.
+
+Event-timeline caveats from v4 still apply: intervals are BB event
+observations, not CPU profiles or causal proof that a specific tool caused
+delay. A malformed lifecycle invalidates duration fields for that run.
+
 ## Reporting
 
 Publish raw machine-readable data, the runner command, and a short narrative
@@ -69,4 +110,6 @@ guessed value. A zero-length event interval is also reported as an
 unobservable channel: the collector preserves its call count but returns
 `null` for that channel and the dependent classified/residual split. Use v4 to
 select a single plugin-only optimization after a controlled run; do not
-retroactively reinterpret v2/v3 evidence with it.
+retroactively reinterpret v2/v3 evidence with it. Re-run v4 (plus the
+context-already-present arm) after lean one-shot explore changes before any
+speed claim.

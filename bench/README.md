@@ -37,7 +37,9 @@ not tell the agent to prefer a particular tool.
 ## Arms
 
 1. **Baseline**: no Code Intelligence plugin is installed.
-2. **Code Intelligence**: install the managed Git plugin at the tested commit.
+2. **enabled-lean-oneshot**: plugin at the tested commit with default
+   `toolSurface lean` and playbook instructions (primary enabled arm).
+3. **enabled-full** (optional): same revision with `toolSurface full`.
 
 Run every task the number of times declared in its contract. v2 uses five
 repetitions per task and arm; v4 currently uses three. Results intentionally
@@ -55,28 +57,37 @@ node bench/run-agent-value-v2.mjs \
   --out /tmp/agent-value-v2.json
 ```
 
-For v4, first set the instruction arm before spawning its threads. Keep the
-plugin revision, provider, model, fixture checkout, and permission mode fixed;
-only then run the corresponding arm. The `--instruction-style` argument labels
-the raw rows — it does not mutate plugin configuration itself.
+For v4, first set the instruction and tool-surface arms before spawning its
+threads. Keep the plugin revision, provider, model, fixture checkout, and
+permission mode fixed; only then run the corresponding arm. The
+`--instruction-style` argument labels the raw rows — it does not mutate plugin
+configuration itself.
 
 ```bash
-# Run this in the enabled arm before spawning its fresh threads.
+# Run this in the enabled-lean arm before spawning its fresh threads.
 bb code-intelligence instruction playbook
+bb code-intelligence tool-surface lean
 
 node bench/run-agent-value-v4.mjs \
   --project <fixture-project-id> \
-  --arm plugin_playbook \
+  --arm plugin_lean_oneshot \
   --instruction-style playbook \
   --engine-label remote-host-snapshot \
   --out /tmp/agent-value-v4.json
 ```
 
-Repeat with `short` and arm name `plugin_short`. For the baseline, uninstall or
-disable the plugin, use arm name `baseline_without_plugin`, and omit the
-instruction-style label. The runner fetches every event-log page before
-selecting the final completed turn, so the diagnostic result does not depend on
-the old 500-event log ceiling.
+Optional full-surface comparison uses `bb code-intelligence tool-surface full`
+and arm name `plugin_full`. For the baseline, uninstall or disable the plugin,
+use arm name `baseline_without_plugin`, and omit the instruction-style label.
+The runner fetches every event-log page before selecting the final completed
+turn, so the diagnostic result does not depend on the old 500-event log ceiling.
+
+### Context-already-present arm
+
+For skip-if-context validation, run prompts that already embed a sufficient
+snippet or relation evidence. Expect **0** discovery calls
+(`codebase_query` / `instant_grep` / shell search). See
+[BENCHMARK.md](../docs/BENCHMARK.md) for the KPI table.
 
 ## Metrics
 
@@ -84,6 +95,12 @@ The runner records answer correctness, completed native Code Intelligence tool
 calls, shell-search commands, total discovery operations, and end-to-end turn
 duration. Completed tool events, rather than plan text, are the source of
 truth for tool use.
+
+Primary v4 speed KPIs after lean one-shot explore:
+
+- share of turns with ≤1 native discovery call (target ≥40% on navigation);
+- median event timeline and runner elapsed vs baseline (must not regress);
+- context-already-present: share with 0 discovery (target ≥70%).
 
 The v4 runner additionally records paired `item/started` → `item/completed`
 event intervals for native Code Intelligence calls, shell-search commands, and

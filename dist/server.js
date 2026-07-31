@@ -16588,96 +16588,91 @@ function buildInstruction(summary, style = "playbook", repositorySummary) {
   const budget = callBudget(summary.symbols);
   const symbols = summary.symbols.toLocaleString("en-US");
   const short = [
-    `Unknown question \u2192 codebase_query; known literal/location \u2192 instant_grep.`,
-    `Known ID relation \u2192 codebase_query trace first, never instant_grep first.`,
-    `instant_grep is primary exact search: literal by default, regex only when needed; answer locations from its hits.`,
-    `No terminal rg/grep/find unless it errors or remains truncated after refinement.`,
-    `Hit \u2192 symbol_lookup for definitions/references; code_graph_context once for structure.`,
-    `Overview/rules/checks \u2192 repository_context. Exact edit \u2192 prechange_impact before; verify_change after.`,
-    `Do not repeat quoted hits. Static absence is inconclusive.`
+    `Skip discovery when the prompt already has enough source/context to answer.`,
+    `Unknown question \u2192 one codebase_query (explore is Read-equivalent: snippets+edges+blast); then answer.`,
+    `Known ID relation \u2192 codebase_query trace once; never instant_grep first.`,
+    `Known literal/location only \u2192 instant_grep; answer from its hits.`,
+    `Discovery budget: at most 2 native discovery calls (codebase_query / instant_grep) per question.`,
+    `No terminal rg/grep/find unless a native tool errors or stays truncated after refinement.`,
+    `Exact edit \u2192 prechange_impact before; verify_change after. Do not repeat quoted hits. Static absence is inconclusive.`
   ].join("\n");
   if (style === "short") return short;
   if (style === "budget") {
     return `${short} Graph budget: at most ${budget} code_graph_context call${budget === 1 ? "" : "s"} for this repository.`;
   }
   return [
-    `# Code intelligence \u2014 explore once, then follow exact evidence`,
+    `# Code intelligence \u2014 one-shot evidence, then stop`,
+    ``,
+    `## Skip when context is already present`,
+    ``,
+    `If the user message or prior tool output already contains the relevant source,`,
+    `file paths, or relation evidence needed to answer, do not call discovery tools.`,
+    `Answer from that context. Re-opening already-quoted snippets wastes a turn.`,
     ``,
     `## Exact discovery`,
     ``,
-    `Use \`instant_grep\` as the primary exact search for identifiers, error strings, imports, and`,
-    `regex patterns (for example \`import.*Service\`). It searches the active workspace with an`,
-    `exact engine (ripgrep for an explicit server-local root, otherwise a BB host-file snapshot); it is not`,
-    `an LLM or graph-index lookup. Start literal by default: use \`regex: true\` only`,
-    `when the pattern needs regex syntax, and narrow broad searches with \`glob\`,`,
-    `\`word\`, or a more specific pattern. It returns file/line hits for the agent`,
-    `to read. Batch independent exact terms with \`patterns\`; use \`files_with_matches\` or`,
-    `\`count\` for a cheap shortlist, and request context only when needed. For a pure`,
-    `location or existence question, answer from those hits and do not call graph analysis.`,
-    `If it truncates, refine the search or use \`nextOffset\` before drawing conclusions.`,
-    `Do not run terminal \`rg\`, \`grep\`, or \`find\` for repository discovery while \`instant_grep\` is available.`,
-    `Use a shell fallback only if this tool errors or stays truncated; state why.`,
+    `Use \`instant_grep\` only for a pure literal, string, import, or regex location`,
+    `question when you do not need structural context. It searches the active workspace`,
+    `(ripgrep for an explicit server-local root, otherwise a BB host-file snapshot).`,
+    `Start literal by default; use \`regex: true\` only when the pattern needs regex`,
+    `syntax. Batch independent terms with \`patterns\`. For a pure location answer,`,
+    `cite the hits and stop. Do not run terminal \`rg\`, \`grep\`, or \`find\` while`,
+    `\`instant_grep\` is available; shell fallback only if it errors or stays truncated.`,
     ``,
-    `## Exploratory questions`,
+    `## Exploratory questions (one-shot)`,
     ``,
-    `For \u201Chow does X work?\u201D, \u201Cwhere is X handled?\u201D, or another question without an exact`,
-    `identifier or file, call \`codebase_query\` first. It combines bounded exact evidence with`,
-    `ranked entry points in one call. Give a short explanation of why this route fits; then choose`,
-    `an exact hit or symbol before using structural analysis.`,
-    `Known direct relation \u2192 \`codebase_query\` \`mode: "trace"\` first, not \`instant_grep\`: exact source context`,
-    `plus direct static relations in one call; absence remains inconclusive.`,
+    `For \u201Chow does X work?\u201D, \u201Cwhere is X handled?\u201D, or any question without an exact`,
+    `identifier/file, call \`codebase_query\` once. Explore mode is Read-equivalent:`,
+    `exact hits plus ranked symbol snippets, call edges, blast radius, and dynamic`,
+    `boundaries in one call. Treat snippets as already read. Answer from that payload;`,
+    `do not follow with \`instant_grep\`, \`symbol_lookup\`, or \`code_graph_context\``,
+    `unless you need lines beyond the snippets or the user asks for a wider structure.`,
+    `Known direct relation \u2192 \`codebase_query\` \`mode: "trace"\` once (not \`instant_grep\` first).`,
+    ``,
+    `## Discovery budget`,
+    ``,
+    `At most 2 native discovery calls (\`codebase_query\` and/or \`instant_grep\`) per`,
+    `user question. Prefer one explore/trace call over a search loop.`,
     ``,
     `## Repository orientation`,
     ``,
-    repositorySummary === void 0 ? `Call \`repository_context\` when you need a project overview, project commands, or repository rules.` : `${repositorySummary}. Call \`repository_context\` for bounded project overview and rule contents.`,
+    repositorySummary === void 0 ? `Call \`repository_context\` when you need a project overview, project commands, or repository rules (full tool surface only).` : `${repositorySummary}. Call \`repository_context\` for bounded project overview and rule contents (full tool surface only).`,
     ``,
     `## Structural context`,
     ``,
-    `${symbols} symbols indexed, ${coverage}. The call graph, the lexical index`,
-    `and git co-change history are already built: one call returns ranked source`,
-    `snippets under a token budget you set, plus who calls what, what depends on`,
-    `the symbols you asked about, and where static analysis provably stops.`,
-    `Treat returned snippets as already read unless you need lines beyond them.`,
+    `${symbols} symbols indexed, ${coverage}. When deeper structure is needed and`,
+    `\`code_graph_context\` / \`symbol_lookup\` are available, prefer seeds from a prior`,
+    `one-shot result over a fresh search. Treat returned snippets as already read.`,
     ``,
     `## Before an edit`,
     ``,
-    `Once you know the exact implementation symbol or file, call prechange_impact`,
-    `first. It is a conservative gate: it lists only direct statically resolved`,
-    `callers and test references, refuses ambiguous bare names, and names the`,
-    `blind spots that make an absence inconclusive. Review that report before`,
-    `changing a public contract.`,
+    `Once you know the exact implementation symbol or file, call \`prechange_impact\``,
+    `first. After an edit, call \`verify_change\` with exact targets only.`,
     ``,
     `Graph budget: at most ${budget} \`code_graph_context\` call${budget === 1 ? "" : "s"} for this repository.`,
-    `Spending more than that on one question means the answers were not being`,
-    `used \u2014 widen budgetTokens or name better seeds instead of calling again.`,
+    `Spending more than that on one question means the answers were not being used \u2014`,
+    `widen budgetTokens or name better seeds instead of calling again.`,
     ``,
     `## Which shape to use`,
     ``,
-    `- No foothold yet \u2014 use \`codebase_query\` once.`,
-    `- Known identifier relationship \u2014 \`codebase_query\` mode trace once; pure identifier, string, import, or regex \u2014 \`instant_grep\`.`,
-    `- You have a symbol or file \u2014 call it with those as seeds; this is the path`,
-    `  the benchmark measured, and it is the stronger one.`,
-    `- You need exact definition/references after discovery \u2014 call \`symbol_lookup\`; it`,
-    `  refuses ambiguous bare names rather than guessing.`,
-    `- After an edit \u2014 call \`verify_change\` with exact targets. It runs only declared`,
-    `  project checks; it never accepts an arbitrary shell command.`,
-    `- About to edit something \u2014 call it first: the answer names what depends on`,
-    `  the symbol and which tests cover it, so the change is made with the blast`,
-    `  radius in view.`,
+    `- Context already in the prompt \u2014 answer; zero discovery calls.`,
+    `- No foothold yet \u2014 \`codebase_query\` explore once, then answer.`,
+    `- Known identifier relationship \u2014 \`codebase_query\` mode trace once.`,
+    `- Pure identifier, string, import, or regex \u2014 \`instant_grep\` once.`,
+    `- About to edit \u2014 \`prechange_impact\`; after edit \u2014 \`verify_change\`.`,
     ``,
     `## Do not`,
     ``,
-    `- Do not use \`code_graph_context\` for literal strings or regexes \u2014 use`,
-    `  \`instant_grep\` instead.`,
-    `- Do not re-open a file the answer already quoted unless you need lines`,
-    `  beyond the snippet.`,
+    `- Do not chain explore \u2192 instant_grep \u2192 code_graph_context for the same question.`,
+    `- Do not re-open a file the answer already quoted unless you need lines beyond the snippet.`,
+    `- Do not use structural tools for literal strings or regexes \u2014 use \`instant_grep\`.`,
     ``,
     `## What it cannot see`,
     ``,
     `Reflection and dynamic dispatch are invisible to static analysis. An empty`,
     `result is inconclusive, not proof that nothing calls a symbol. Where the`,
-    `static path ends, the answer says so explicitly instead of inventing an`,
-    `edge \u2014 read those lines before concluding a symbol is unused.`
+    `static path ends, the answer says so explicitly \u2014 read those lines before`,
+    `concluding a symbol is unused.`
   ].join("\n");
 }
 
@@ -17282,12 +17277,12 @@ function directTrace(index, matches, target) {
       lines: [symbol2.startLine + 1, symbol2.endLine + 1],
       callers: uniqueRelations((index.callersOf.get(node) ?? []).map((caller) => relation(index, caller, node))).slice(0, 12),
       callees: uniqueRelations((index.calleesOf.get(node) ?? []).map((callee) => relation(index, node, callee))).slice(0, 12),
-      supertypes: uniqueRelations((index.supertypesOf.get(node) ?? []).map((target) => relation(index, node, target, "extends"))).slice(0, 12),
-      subtypes: uniqueRelations((index.subtypesOf.get(node) ?? []).map((target) => relation(index, node, target, "extends"))).slice(0, 12),
-      implements: uniqueRelations((index.implementsOf.get(node) ?? []).map((target) => relation(index, node, target, "implements"))).slice(0, 12),
-      implementations: uniqueRelations((index.implementationsOf.get(node) ?? []).map((target) => relation(index, node, target, "implements"))).slice(0, 12),
-      overrides: uniqueRelations((index.overridesOf.get(node) ?? []).map((target) => relation(index, node, target, "overrides"))).slice(0, 12),
-      overriddenBy: uniqueRelations((index.overriddenBy.get(node) ?? []).map((target) => relation(index, node, target, "overrides"))).slice(0, 12)
+      supertypes: uniqueRelations((index.supertypesOf.get(node) ?? []).map((target2) => relation(index, node, target2, "extends"))).slice(0, 12),
+      subtypes: uniqueRelations((index.subtypesOf.get(node) ?? []).map((target2) => relation(index, node, target2, "extends"))).slice(0, 12),
+      implements: uniqueRelations((index.implementsOf.get(node) ?? []).map((target2) => relation(index, node, target2, "implements"))).slice(0, 12),
+      implementations: uniqueRelations((index.implementationsOf.get(node) ?? []).map((target2) => relation(index, node, target2, "implements"))).slice(0, 12),
+      overrides: uniqueRelations((index.overridesOf.get(node) ?? []).map((target2) => relation(index, node, target2, "overrides"))).slice(0, 12),
+      overriddenBy: uniqueRelations((index.overriddenBy.get(node) ?? []).map((target2) => relation(index, node, target2, "overrides"))).slice(0, 12)
     });
   }
   return { symbols };
@@ -17970,6 +17965,22 @@ async function collectRemoteSources(options) {
 
 // src/config.ts
 var INSTRUCTION_STYLES = ["playbook", "budget", "short", "off"];
+var TOOL_SURFACES = ["lean", "full"];
+var LEAN_AGENT_TOOLS = [
+  "codebase_query",
+  "instant_grep",
+  "prechange_impact",
+  "verify_change"
+];
+var FULL_AGENT_TOOLS = [
+  "instant_grep",
+  "codebase_query",
+  "code_graph_context",
+  "repository_context",
+  "symbol_lookup",
+  "prechange_impact",
+  "verify_change"
+];
 var DEFAULT_CODE_GRAPH_CONFIG = Object.freeze({
   autoIndex: true,
   respectGitignore: true,
@@ -17980,7 +17991,8 @@ var DEFAULT_CODE_GRAPH_CONFIG = Object.freeze({
   includeSnippets: true,
   useCochange: true,
   defaultBudgetTokens: 4e3,
-  instructionStyle: "playbook"
+  instructionStyle: "playbook",
+  toolSurface: "lean"
 });
 var LIMITS = {
   refreshIntervalSeconds: [5, 3600],
@@ -18034,12 +18046,16 @@ function normalizeCodeGraphConfig(value) {
     instructionStyle: INSTRUCTION_STYLES.includes(
       source.instructionStyle
     ) ? source.instructionStyle : DEFAULT_CODE_GRAPH_CONFIG.instructionStyle,
+    toolSurface: TOOL_SURFACES.includes(source.toolSurface) ? source.toolSurface : DEFAULT_CODE_GRAPH_CONFIG.toolSurface,
     defaultBudgetTokens: integerValue(
       source.defaultBudgetTokens,
       DEFAULT_CODE_GRAPH_CONFIG.defaultBudgetTokens,
       ...LIMITS.defaultBudgetTokens
     )
   };
+}
+function agentToolsForSurface(surface) {
+  return surface === "full" ? FULL_AGENT_TOOLS : LEAN_AGENT_TOOLS;
 }
 function mergeCodeGraphConfig(current, patch) {
   return normalizeCodeGraphConfig({ ...current, ...patch });
@@ -18323,7 +18339,8 @@ var configSchema = external_exports.object({
   useCochange: external_exports.boolean(),
   defaultBudgetTokens: external_exports.number().int().min(256).max(32e3),
   // An A/B knob, exposed so the two instruction changes can be measured apart.
-  instructionStyle: external_exports.enum(["playbook", "budget", "short", "off"])
+  instructionStyle: external_exports.enum(["playbook", "budget", "short", "off"]),
+  toolSurface: external_exports.enum(["lean", "full"])
 });
 var configPatchSchema = configSchema.partial().strict();
 var indexViewSchema = external_exports.object({
@@ -18795,8 +18812,8 @@ async function plugin(bb) {
   }
   bb.agents.registerTool({
     name: "instant_grep",
-    description: "Fast literal or regex search over the active workspace. It uses ripgrep for an explicit server-local root and a BB host-file snapshot for a thread environment. Use it first for exact locations, error strings, imports, and regex patterns; for a known identifier's direct caller/callee/delegation, use codebase_query mode trace first. It returns matching file/line locations without an LLM or graph-index lookup.",
-    instructions: "This is the primary exact-location search tool. For a known identifier's direct caller, callee, or delegation, do not call this first: call codebase_query with mode trace once instead. Search exact identifiers, strings, imports, and regexes here before using structural analysis. Use `regex: true` for patterns such as `import.*PaymentService`, `word: true` for whole identifiers, and a glob to narrow large searches. Omit `root` unless the user explicitly supplies another workspace: the default is the active BB project, and remembered paths may be stale. Use `patterns` to batch independent queries with shared options. `content` returns exact lines plus optional context; `files_with_matches` and `count` are cheaper summaries. For a pure location answer, cite a content hit directly rather than opening the file. It stops at `limit`; use nextOffset or refine the pattern/glob before reading files.",
+    description: "Fast literal or regex search over the active workspace. It uses ripgrep for an explicit server-local root and a BB host-file snapshot for a thread environment. Use for pure location/existence questions (identifiers, error strings, imports, regexes). For exploratory how/where questions or a known identifier's direct relation, prefer codebase_query once instead. Returns matching file/line locations without an LLM lookup.",
+    instructions: "Use for pure exact-location answers only. Skip when the prompt already has enough context. For exploratory questions or a known identifier's direct caller/callee/delegation, call codebase_query once instead \u2014 do not chain this after explore. Use `regex: true` for patterns such as `import.*PaymentService`, `word: true` for whole identifiers, and a glob to narrow large searches. Omit `root` unless the user explicitly supplies another workspace. Use `patterns` to batch independent queries. For a pure location answer, cite a content hit and stop. It stops at `limit`; refine pattern/glob or use nextOffset before reading files.",
     parameters: external_exports.object({
       pattern: external_exports.string().min(1).max(1e3).optional().describe("One literal text pattern by default, or a regex when regex is true."),
       patterns: external_exports.array(external_exports.string().min(1).max(1e3)).min(1).max(10).optional().describe("Independent patterns with the same search options; use instead of pattern to save tool calls."),
@@ -18854,7 +18871,7 @@ async function plugin(bb) {
             tokensUsed: 0
           });
         }
-        const next = (result) => result.truncated ? "Refine pattern/glob or call again with nextOffset before treating this search as exhaustive." : outputMode === "content" ? "For a pure location/existence answer, cite this exact hit directly. Use code_graph_context only for structural questions." : "Use content mode on a selected file only when you need source lines.";
+        const next = (result) => result.truncated ? "Refine pattern/glob or call again with nextOffset before treating this search as exhaustive." : outputMode === "content" ? "For a pure location/existence answer, cite this exact hit and stop. Do not open the file or chain structural tools unless you need lines beyond this hit." : "Use content mode on a selected file only when you need source lines.";
         return JSON.stringify(
           searchPatterns.length === 1 ? { engine: isRemoteRoot(root) ? "BB host-file snapshot" : "ripgrep", root: rootLabel(root), mode: regex ? "regex" : "literal", outputMode, ...results[0], ...inventoryLimitField(root), next: next(results[0]) } : { engine: isRemoteRoot(root) ? "BB host-file snapshot" : "ripgrep", root: rootLabel(root), outputMode, results, ...inventoryLimitField(root), next: "Each result is independent; answer from exact hits or narrow only the query that needs it." },
           null,
@@ -18870,8 +18887,8 @@ async function plugin(bb) {
   });
   bb.agents.registerTool({
     name: "codebase_query",
-    description: "Explore a codebase from a natural-language question in one bounded call. It combines a few deterministic exact workspace searches with graph-ranked symbols; no LLM runs inside it.",
-    instructions: "Use this as the first tool for an exploratory question when you do not yet know an exact identifier or file. It returns exact hits plus ranked entry points. For a known identifier and only its direct caller, callee, or delegation, use mode trace first without instant_grep: one call returns its exact source context and direct static relations. For a pure location or literal question, use instant_grep instead.",
+    description: "PRIMARY one-shot navigation for exploratory how/where questions and known-ID relations. Explore mode is Read-equivalent: exact hits plus ranked symbol snippets (line-numbered), call edges, blast radius, and dynamicBoundaries in one capped call \u2014 treat snippets as already Read. Trace mode returns exact source context and direct static relations for a known identifier. No LLM runs inside it.",
+    instructions: "Call once for an exploratory question or a known identifier's direct caller/callee/delegation (mode trace). Skip when the prompt already has enough context. Explore returns Read-equivalent snippets + edges + blast radius \u2014 answer from that payload; do not follow with instant_grep, symbol_lookup, or code_graph_context unless you need lines beyond the snippets. For a pure location or literal question with no structural need, use instant_grep instead.",
     parameters: external_exports.object({
       query: external_exports.string().min(3).max(1e3).describe("Natural-language question about the codebase. Include an identifier in backticks when you know one."),
       explanation: external_exports.string().min(8).max(300).describe("Why this bounded exploration or direct-relation trace fits the question."),
@@ -18891,7 +18908,7 @@ async function plugin(bb) {
         const indexStartedAt = performance.now();
         const ready = await ensureIndex(root, signal);
         const indexMs = performance.now() - indexStartedAt;
-        const effectiveBudget = budgetTokens ?? Math.min(config2.defaultBudgetTokens, 1024);
+        const effectiveBudget = budgetTokens ?? config2.defaultBudgetTokens;
         const result = await queryCodebase(ready.root, ready.index, {
           query,
           mode,
@@ -18901,6 +18918,7 @@ async function plugin(bb) {
         });
         const context = result.context;
         const trace = result.trace;
+        const exploreSymbols = context === void 0 ? void 0 : config2.includeSnippets ? await attachSnippets(ready.root, context.symbols, BODY_LINE_LIMIT, remoteSources.get(ready.root)) : context.symbols;
         if (typeof threadId === "string") {
           await recordFeedbackAnswer({
             threadId,
@@ -18925,18 +18943,44 @@ async function plugin(bb) {
           mode: result.mode,
           patterns: result.patterns,
           exactHits: result.exactMatches.slice(0, 12),
-          ...context === void 0 ? {} : { symbols: context.symbols.slice(0, 12).map((symbol2) => ({
-            id: symbol2.id,
-            file: symbol2.file,
-            lines: [symbol2.startLine + 1, symbol2.endLine + 1],
-            via: symbol2.via
-          })) },
-          ...context === void 0 ? {} : { graphFiles: context.files.slice(0, 12) },
+          ...exploreSymbols === void 0 ? {} : {
+            symbols: exploreSymbols.slice(0, 12).map((symbol2) => ({
+              id: symbol2.id,
+              file: symbol2.file,
+              lines: [symbol2.startLine + 1, symbol2.endLine + 1],
+              tokens: symbol2.tokens,
+              via: symbol2.via,
+              ...config2.includeSnippets ? { snippet: symbol2.snippet ?? "" } : {}
+            })),
+            tokensUsed: context.tokensUsed,
+            budgetTokens: effectiveBudget,
+            dynamicBoundaries: boundariesIn(exploreSymbols).map((boundary) => ({
+              at: `${boundary.file}:${boundary.line}`,
+              form: boundary.form,
+              ...boundary.key === void 0 ? {} : { key: boundary.key }
+            })),
+            edges: context.edges.map((edge) => ({
+              from: edge.from,
+              to: edge.to,
+              via: edge.via
+            })),
+            blastRadius: context.blastRadius.map((entry) => ({
+              symbol: entry.id,
+              at: `${entry.file}:${entry.startLine + 1}`,
+              callers: entry.callers,
+              callerFiles: entry.callerFiles,
+              ...entry.testFiles.length > 0 ? { tests: entry.testFiles } : { tests: [], warning: "no covering tests found" }
+            })),
+            graphFiles: context.files.slice(0, 12)
+          },
           ...trace === void 0 ? {} : { trace: trace.symbols },
           graphCompleteness: ready.index.graphCompletenessReliable ? `>= ${(ready.index.graphCompleteness * 100).toFixed(0)}%` : "not estimable \u2014 too few edges were found by more than one strategy",
           ...inventoryLimitField(ready.root),
           timingMs: { index: indexMs, ...result.timingMs },
-          next: result.mode === "trace" ? trace?.symbols.length === 0 ? "No indexed definition enclosed an exact hit. Refine the identifier or use instant_grep; an empty trace is not proof of no relation." : "The exact definition and direct relation above answer this trace. Answer now; do not call instant_grep or code_graph_context unless the user asks for source beyond this result or a wider structure." : "Choose an exact hit or symbol from this response. Use instant_grep for a narrower exact follow-up, then symbol_lookup or code_graph_context for structure."
+          ...result.mode === "explore" && config2.includeSnippets ? {
+            note: "Snippets are truncated bodies \u2014 treat them as already Read. Open a file only when you need lines beyond them. graphCompleteness is a lower bound; reflection and dynamic dispatch are invisible to static analysis."
+          } : {},
+          next: result.mode === "trace" ? trace?.symbols.length === 0 ? "No indexed definition enclosed an exact hit. Refine the identifier or use instant_grep; an empty trace is not proof of no relation." : "The exact definition and direct relation above answer this trace. Answer now; do not call instant_grep or code_graph_context unless the user asks for source beyond this result or a wider structure." : exploreSymbols === void 0 || exploreSymbols.length === 0 ? "No ranked symbols for this query. Answer from exactHits if present, or refine the question; do not start a multi-tool search loop." : "Exact hits plus Read-equivalent snippets, edges, and blast radius above answer this exploration. Answer now; do not call instant_grep, symbol_lookup, or code_graph_context unless you need lines beyond the snippets or a wider structure."
         }, null, 2);
       } catch (error51) {
         return {
@@ -18955,7 +18999,7 @@ async function plugin(bb) {
      * at registration, before any index exists. Keeping the two in sync matters
      * more than saying everything twice, so this stays the short form.
      */
-    instructions: "Use instant_grep for exact text and regex discovery. Use this after you have a symbol/file hit and need structural context, callers, tests, or static-analysis limits; do not call it for a pure location, existence, or exact test-hit answer. Treat returned snippets as already read \u2014 do not re-open them unless you need lines beyond the snippet. Before concluding a symbol has no callers, read graphCompleteness and dynamicBoundaries: a missing edge is not an absent one.",
+    instructions: "Prefer codebase_query explore/trace for first discovery \u2014 it is already Read-equivalent. Use this only when you already have seeds and need a deeper structural pass (full tool surface), or when explore snippets are insufficient. Do not call it for a pure location, existence, or exact test-hit answer. Treat returned snippets as already read. Before concluding a symbol has no callers, read graphCompleteness and dynamicBoundaries: a missing edge is not an absent one.",
     parameters: external_exports.object({
       seeds: external_exports.array(external_exports.string()).default([]).describe("Symbol names or file paths already known to be relevant."),
       query: external_exports.string().default("").describe(
@@ -19109,7 +19153,7 @@ async function plugin(bb) {
   bb.agents.registerTool({
     name: "symbol_lookup",
     description: "Deterministic go-to-definition and direct static reference lookup for exact symbol ids, source files, or a unique name. It reports ambiguity instead of guessing.",
-    instructions: "Use after instant_grep finds a symbol or file and you need exact definitions, direct callers, or test references. For an edit, still call prechange_impact after resolving the target. A missing static reference is inconclusive when graph limitations apply.",
+    instructions: "Prefer codebase_query explore/trace for first discovery. Use this when you already know an exact symbol id or unique name and need definitions/direct references (full tool surface). For an edit, still call prechange_impact after resolving the target. A missing static reference is inconclusive when graph limitations apply.",
     parameters: external_exports.object({
       targets: external_exports.array(external_exports.string().min(1)).min(1).max(30).describe("Exact symbol ids, source-file paths, or a bare name only when it is unique."),
       root: external_exports.string().optional().describe("Explicit server-local root. Omit to use the current thread workspace, including a remote environment.")
@@ -19372,18 +19416,21 @@ async function plugin(bb) {
       root === null ? void 0 : repositoryContexts.get(root)?.context && repositoryContextSummary(repositoryContexts.get(root).context)
     );
   });
-  bb.agents.configure(() => ({
-    tools: [
-      "instant_grep",
-      "codebase_query",
-      "code_graph_context",
-      "repository_context",
-      "symbol_lookup",
-      "prechange_impact",
-      "verify_change"
-    ],
-    skills: []
-  }));
+  bb.agents.configure(({ project, sideChat }) => {
+    const root = rootsByProject.get(project.id) ?? null;
+    const instructions = buildInstruction(
+      root === null ? null : summaryOf(indexes.get(root), rootLabel),
+      config2.instructionStyle,
+      root === null ? void 0 : repositoryContexts.get(root)?.context && repositoryContextSummary(repositoryContexts.get(root).context)
+    );
+    return {
+      tools: [...agentToolsForSurface(config2.toolSurface)],
+      skills: [],
+      // Side-chat only: ordinary threads already receive the playbook via
+      // contributeInstructions; duplicating it here would bloat the prompt.
+      ...sideChat && instructions !== null ? { instructions } : {}
+    };
+  });
   bb.events.on("thread.idle", ({ thread }) => {
     const answers = pending.get(thread.id);
     if (answers === void 0 || answers.length === 0) return;
@@ -19511,6 +19558,16 @@ async function plugin(bb) {
     commands: [
       { name: "status", summary: "Index and feedback statistics", usage: "bb code-intelligence status" },
       {
+        name: "instruction",
+        summary: "Get or set the agent instruction style (playbook|budget|short|off)",
+        usage: "bb code-intelligence instruction [playbook|budget|short|off]"
+      },
+      {
+        name: "tool-surface",
+        summary: "Get or set the advertised agent tool set (lean|full)",
+        usage: "bb code-intelligence tool-surface [lean|full]"
+      },
+      {
         name: "feedback",
         summary: "Compare shell-search continuation and recall by plugin search surface",
         usage: "bb code-intelligence feedback [--json]"
@@ -19557,6 +19614,27 @@ async function plugin(bb) {
         });
         await bb.storage.kv.set(CONFIG_KEY, config2);
         return { exitCode: 0, stdout: `instructionStyle = ${value}
+` };
+      }
+      if (command === "tool-surface") {
+        const [value] = rest;
+        const allowed = ["lean", "full"];
+        if (value === void 0) {
+          return { exitCode: 0, stdout: `${config2.toolSurface}
+` };
+        }
+        if (!allowed.includes(value)) {
+          return {
+            exitCode: 2,
+            stderr: `tool-surface must be one of: ${allowed.join(", ")}
+`
+          };
+        }
+        config2 = mergeCodeGraphConfig(config2, {
+          toolSurface: value
+        });
+        await bb.storage.kv.set(CONFIG_KEY, config2);
+        return { exitCode: 0, stdout: `toolSurface = ${value}
 ` };
       }
       if (command === "status") {
