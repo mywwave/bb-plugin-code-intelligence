@@ -3610,7 +3610,7 @@ var $ZodObjectJIT = /* @__PURE__ */ $constructor("$ZodObjectJIT", (inst, def) =>
             })));
           }
         }
-
+        
         if (${id}.value === undefined) {
           if (${k} in input) {
             newResult[${k}] = undefined;
@@ -3618,7 +3618,7 @@ var $ZodObjectJIT = /* @__PURE__ */ $constructor("$ZodObjectJIT", (inst, def) =>
         } else {
           newResult[${k}] = ${id}.value;
         }
-
+        
       `);
       } else if (!isOptionalIn) {
         doc.write(`
@@ -3655,7 +3655,7 @@ var $ZodObjectJIT = /* @__PURE__ */ $constructor("$ZodObjectJIT", (inst, def) =>
             path: iss.path ? [${k}, ...iss.path] : [${k}]
           })));
         }
-
+        
         if (${id}.value === undefined) {
           if (${k} in input) {
             newResult[${k}] = undefined;
@@ -3663,7 +3663,7 @@ var $ZodObjectJIT = /* @__PURE__ */ $constructor("$ZodObjectJIT", (inst, def) =>
         } else {
           newResult[${k}] = ${id}.value;
         }
-
+        
       `);
       }
     }
@@ -16526,6 +16526,10 @@ function insertSorted(values, value, limit, compare) {
   values.sort(compare);
   if (values.length > limit + 1) values.pop();
 }
+function normalizeInstantGrepFile(file2) {
+  const posix = file2.replace(/\\/g, "/");
+  return posix.startsWith("./") ? posix : `./${posix}`;
+}
 function collectNullRecords(root, args, limit, signal) {
   return new Promise((resolve, reject) => {
     const child = spawn("rg", args, { cwd: root, stdio: ["ignore", "pipe", "pipe"] });
@@ -16547,7 +16551,9 @@ function collectNullRecords(root, args, limit, signal) {
       while ((boundary = buffer.indexOf("\0")) >= 0) {
         const record2 = buffer.slice(0, boundary);
         buffer = buffer.slice(boundary + 1);
-        if (record2 !== "") insertSorted(records, record2, limit, (left, right) => left.localeCompare(right));
+        if (record2 !== "") {
+          insertSorted(records, normalizeInstantGrepFile(record2), limit, (left, right) => left.localeCompare(right));
+        }
       }
     });
     child.stderr.setEncoding("utf8");
@@ -16585,7 +16591,12 @@ function collectCountRecords(root, args, limit, signal) {
     const record2 = (file2, countText) => {
       const count = Number(countText);
       if (!Number.isInteger(count)) return;
-      insertSorted(counts, { file: file2, count }, limit, (left, right) => left.file.localeCompare(right.file));
+      insertSorted(
+        counts,
+        { file: normalizeInstantGrepFile(file2), count },
+        limit,
+        (left, right) => left.file.localeCompare(right.file)
+      );
     };
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (chunk) => {
@@ -16682,7 +16693,11 @@ function streamContentSearch(root, options, limit, offset) {
         skipped++;
         return;
       }
-      matches.push({ file: file2, line: lineNumber, text: text.replace(/\r?\n$/, "") });
+      matches.push({
+        file: normalizeInstantGrepFile(file2),
+        line: lineNumber,
+        text: text.replace(/\r?\n$/, "")
+      });
       if (matches.length >= limit) abort();
     };
     child.stdout.setEncoding("utf8");
@@ -16775,9 +16790,6 @@ function sourceMatcher(options) {
   const wordExpression = new RegExp(`\\b(?:${expression.source})\\b`, flags);
   return (line) => wordExpression.test(line);
 }
-function displaySourceFile(file2) {
-  return file2.startsWith("./") ? file2 : `./${file2}`;
-}
 async function instantGrepSources(sources, options) {
   validateOptions(options);
   const limit = normalizedLimit(options.limit);
@@ -16795,16 +16807,16 @@ async function instantGrepSources(sources, options) {
     const lineIndexes = lines.flatMap((line, index) => matchesLine(line) ? [index] : []);
     if (lineIndexes.length === 0) continue;
     if ((options.outputMode ?? "content") === "files_with_matches") {
-      files.push(displaySourceFile(file2));
+      files.push(normalizeInstantGrepFile(file2));
       continue;
     }
     if (options.outputMode === "count") {
-      counts.push({ file: displaySourceFile(file2), count: lineIndexes.length });
+      counts.push({ file: normalizeInstantGrepFile(file2), count: lineIndexes.length });
       continue;
     }
     for (const index of lineIndexes) {
       candidates.push({
-        file: displaySourceFile(file2),
+        file: normalizeInstantGrepFile(file2),
         line: index + 1,
         text: lines[index],
         ...beforeCount > 0 ? {
@@ -18126,7 +18138,9 @@ async function plugin(bb) {
   }
   async function ensureIndex(inputRoot, signal) {
     const root = isRemoteRoot(inputRoot) ? inputRoot : resolvePath(inputRoot);
-    const ready = await indexes.ensure(root, () => rebuildIndex(root, void 0, signal));
+    throwIfAborted(signal);
+    const ready = await indexes.ensure(root, () => rebuildIndex(root));
+    throwIfAborted(signal);
     await refreshRepositoryContext(ready);
     activeRoot = ready.root;
     return ready;

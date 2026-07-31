@@ -4060,7 +4060,7 @@ var Parser = class {
 };
 
 
-	return {
+	return { 
   CaptureQuantifier,
   LANGUAGE_VERSION,
   Language,
