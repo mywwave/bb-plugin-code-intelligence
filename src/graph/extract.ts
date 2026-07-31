@@ -313,8 +313,12 @@ function declaredTypeRelations(
   const child = (parent: AstNode, type: string): AstNode | undefined =>
     children(parent).find((candidate) => candidate.type === type);
   const typeName = (candidate: AstNode): string | undefined => {
-    if (["identifier", "type_identifier", "scoped_type_identifier"].includes(candidate.type)) {
+    if (["identifier", "type_identifier", "scoped_type_identifier", "property_identifier", "field_identifier"].includes(candidate.type)) {
       return candidate.text.split(".").at(-1);
+    }
+    if (["attribute", "member_expression"].includes(candidate.type)) {
+      const terminal = children(candidate).at(-1);
+      return terminal === undefined ? undefined : typeName(terminal);
     }
     return children(candidate).map(typeName).find((name): name is string => name !== undefined);
   };
@@ -379,6 +383,10 @@ function symbolId(
 }
 
 function definitionFor(node: AstNode, language: LanguageId, container: string | null): Definition | null {
+  if (language === "python" && node.type === "function_definition" && container !== null) {
+    const name = nameOf(node);
+    return name === null ? null : { kind: "method", name };
+  }
   const bound = functionBinding(node);
   const existingKind = DEFINITION_TYPES.get(node.type) ?? bound?.kind;
   const existingName = bound?.name ?? nameOf(node);

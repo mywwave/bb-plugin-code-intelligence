@@ -15387,8 +15387,12 @@ function declaredTypeRelations(node, language, file2, subtype) {
   const children = (parent) => Array.from({ length: parent.namedChildCount }, (_, index) => parent.namedChild(index)).filter((child2) => child2 !== null);
   const child = (parent, type) => children(parent).find((candidate) => candidate.type === type);
   const typeName = (candidate) => {
-    if (["identifier", "type_identifier", "scoped_type_identifier"].includes(candidate.type)) {
+    if (["identifier", "type_identifier", "scoped_type_identifier", "property_identifier", "field_identifier"].includes(candidate.type)) {
       return candidate.text.split(".").at(-1);
+    }
+    if (["attribute", "member_expression"].includes(candidate.type)) {
+      const terminal = children(candidate).at(-1);
+      return terminal === void 0 ? void 0 : typeName(terminal);
     }
     return children(candidate).map(typeName).find((name) => name !== void 0);
   };
@@ -15443,6 +15447,10 @@ function symbolId(file2, name, kind, container, start) {
   return `${file2}#${qualified}@${start.row + 1}:${start.column + 1}`;
 }
 function definitionFor(node, language, container) {
+  if (language === "python" && node.type === "function_definition" && container !== null) {
+    const name = nameOf(node);
+    return name === null ? null : { kind: "method", name };
+  }
   const bound = functionBinding(node);
   const existingKind = DEFINITION_TYPES.get(node.type) ?? bound?.kind;
   const existingName = bound?.name ?? nameOf(node);
