@@ -112,6 +112,30 @@ describe("codebase query", () => {
     expect(result.exactMatches.every((match) => match.file === "./src/error.rs")).toBe(true);
   });
 
+  it("uses exact-hit files to break a same-owner trace tie", async () => {
+    const root = await fixture({
+      "src/io/error.rs": "impl Error { pub fn new() -> Self { Self } }\n",
+      "src/net/error.rs": "impl Error { pub fn new() -> Self { Self } }\n",
+    });
+    const ioNew = { ...symbol("src/io/error.rs#Error.new", "new", "src/io/error.rs", "io"), kind: "method" as const, container: "Error" };
+    const netNew = { ...symbol("src/net/error.rs#Error.new", "new", "src/net/error.rs", "net"), kind: "method" as const, container: "Error" };
+    const index = buildIndex({ symbols: [ioNew, netNew], edges: [], ambiguousCalls: 0 } satisfies IndexInput, () => "", 0.8, true);
+
+    const result = await queryCodebase(root, index, {
+      query: "Trace `net::Error::new`.",
+      mode: "trace",
+      budgetTokens: 160,
+      search: async () => [{
+        pattern: "new",
+        matches: [{ file: "./src/net/error.rs", line: 1, text: "impl Error { pub fn new() -> Self { Self } }", before: [], after: [] }],
+        truncated: false,
+      }],
+    });
+
+    expect(result.trace?.symbols).toEqual([expect.objectContaining({ id: netNew.id })]);
+    expect(result.exactMatches).toHaveLength(1);
+  });
+
   it("returns both exact disk hits and graph-ranked entry points", async () => {
     const root = await fixture({
       "src/payment/error.ts": "export class PaymentFailedError extends Error {}\n",

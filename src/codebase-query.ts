@@ -169,11 +169,27 @@ function candidateTraceNodes(
   const anchor = target?.anchor;
   const nameMatches = (node: number): boolean => anchor !== undefined && index.symbols[node]!.name === anchor;
   const ownerMatches = (node: number): boolean => target?.owner !== undefined && index.symbols[node]!.container === target.owner;
+  const named = new Set<number>();
+  for (const match of matches) {
+    for (const node of index.nodesByFile.get(matchIndexFile(match.file)) ?? []) {
+      if (index.symbols[node]!.name === match.pattern) named.add(node);
+    }
+  }
 
   // A path such as `anyhow::Error::new` cannot be searched literally: Rust
   // declarations spell only `new`. Prefer the indexed method owner before
-  // falling back to name-only matching, so common constructors do not turn a
-  // one-call trace into an unrelated three-symbol answer.
+  // falling back to name-only matching. Exact hits break a same-owner tie
+  // first; the whole symbol table is only a fallback for a bounded search
+  // page that did not include the declaration.
+  if (target?.owner !== undefined) {
+    const matchedOwned = [...named].filter((node) => nameMatches(node) && ownerMatches(node));
+    if (matchedOwned.length > 0) return matchedOwned;
+  }
+  // A known identifier should prefer its declaration even when an import or a
+  // caller happens to sort first in the exact-search results. Containing
+  // symbols are only a fallback for identifiers that extraction cannot name.
+  if (named.size > 0) return [...named];
+
   if (target?.owner !== undefined) {
     const owned = new Set<number>();
     for (const node of index.symbols.keys()) {
@@ -181,17 +197,6 @@ function candidateTraceNodes(
     }
     if (owned.size > 0) return [...owned];
   }
-
-  const named = new Set<number>();
-  for (const match of matches) {
-    for (const node of index.nodesByFile.get(matchIndexFile(match.file)) ?? []) {
-      if (index.symbols[node]!.name === match.pattern) named.add(node);
-    }
-  }
-  // A known identifier should prefer its declaration even when an import or a
-  // caller happens to sort first in the exact-search results. Containing
-  // symbols are only a fallback for identifiers that extraction cannot name.
-  if (named.size > 0) return [...named];
 
   // The bounded exact search can fill with examples before a declaration in a
   // large repository. The trace anchor still names the declaration we need,

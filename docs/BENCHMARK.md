@@ -65,5 +65,8 @@ only an observation of BB event timing. They are not CPU samples, do not expose
 hidden reasoning text, and cannot establish that a particular tool caused a
 full-turn delay. A missing, duplicate, mismatched, or non-monotonic lifecycle
 pair invalidates every duration field for that run rather than producing a
-guessed value. Use v4 to select a single plugin-only optimization after a
-controlled run; do not retroactively reinterpret v2/v3 evidence with it.
+guessed value. A zero-length event interval is also reported as an
+unobservable channel: the collector preserves its call count but returns
+`null` for that channel and the dependent classified/residual split. Use v4 to
+select a single plugin-only optimization after a controlled run; do not
+retroactively reinterpret v2/v3 evidence with it.

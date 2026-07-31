@@ -13,8 +13,10 @@
   with the `playbook` instruction style.
 - Correctness is the contract's expected path plus required final-answer terms.
   Counts come from completed BB events. Each result was rechecked after the
-  thread completed; all 30 rows have complete timing and clean lifecycle
-  diagnostics.
+  thread completed; all 30 rows have clean lifecycle diagnostics. In this BB
+  version `commandExecution` start/completion events collapse to approximately
+  0 ms, so shell-search time is not observable in the classified/unaccounted
+  split.
 
 ## Aggregate result
 
@@ -50,7 +52,10 @@ observed intervals are **not** CPU profiles, native-tool runtimes,
 hidden-reasoning durations, or causal latency evidence. In particular, the
 enabled arm's longer observed timelines mean this sample rejects a speedup
 claim; the next optimization must address that cost before any performance
-promise is made.
+promise is made. The raw rows retain the collapsed shell-event values for
+auditability, but they must not be used to compare classified or unaccounted
+time between arms. The current collector marks a collapsed channel as
+unobservable and returns `null` for that channel and the dependent residuals.
 
 The sample has only three repetitions per task and one enabled instruction
 style. It is a reproducible diagnostic baseline, not a significance test, a

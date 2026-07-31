@@ -130,6 +130,35 @@ describe("collectAgentValueV4Metrics", () => {
     });
   });
 
+  it("marks collapsed shell lifecycle intervals as unobservable instead of using them in cross-channel residuals", () => {
+    const metrics = collectAgentValueV4Metrics([
+      ...turn({ seq: 1 }),
+      ...lifecycle({
+        seq: 10,
+        startedAt: 100,
+        completedAt: 100,
+        item: { type: "commandExecution", id: "shell", command: "rg answer src" },
+      }),
+      ...lifecycle({
+        seq: 20,
+        startedAt: 200,
+        completedAt: 300,
+        item: { type: "toolCall", id: "native", function: { name: "instant_grep" } },
+      }),
+    ], expected);
+
+    expect(metrics).toMatchObject({
+      timingStatus: "complete",
+      shellSearchCalls: 1,
+      shellSearchTimelineMs: null,
+      nativePluginTimelineMs: 100,
+      classifiedTimelineMs: null,
+      unaccountedTurnTimelineMs: null,
+      zeroDurationIds: ["shell"],
+      unobservableTimelineChannels: ["shellSearch"],
+    });
+  });
+
   it("does not classify unrelated tools or non-search shell commands", () => {
     const metrics = collectAgentValueV4Metrics([
       ...turn({ seq: 1 }),

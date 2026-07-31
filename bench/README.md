@@ -90,7 +90,10 @@ event intervals for native Code Intelligence calls, shell-search commands, and
 reasoning items. It merges overlaps before calculating the classified portion
 of a turn and retains malformed-lifecycle diagnostics. If a completed turn,
 pair, type, or timestamp is ambiguous, every v4 duration field is `null` rather
-than guessed; call counts and diagnostics remain available for inspection.
+than guessed; call counts and diagnostics remain available for inspection. A
+collapsed zero-length interval is likewise reported as an unobservable channel:
+its count remains inspectable, while that channel and the dependent
+classified/residual split are `null` rather than treated as instantaneous work.
 
 ## Interpretation
 

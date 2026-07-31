@@ -103,6 +103,7 @@ export function collectAgentValueV4Metrics(rawEvents, expected) {
     duplicateStartedIds: [],
     typeMismatchIds: [],
     invalidTimestampIds: [],
+    zeroDurationIds: [],
   };
   const starts = new Map();
   const pairs = [];
@@ -146,6 +147,16 @@ export function collectAgentValueV4Metrics(rawEvents, expected) {
     (pair) => pair.item.type === "commandExecution" && SHELL_SEARCH.test(pair.item.command ?? ""),
   );
   const reasoningPairs = pairs.filter((pair) => pair.item.type === "reasoning");
+  const collapsed = (pairs) => pairs.filter((pair) => pair.end === pair.start);
+  const nativeCollapsed = collapsed(nativePairs);
+  const shellCollapsed = collapsed(shellPairs);
+  const reasoningCollapsed = collapsed(reasoningPairs);
+  diagnostics.zeroDurationIds.push(...[...nativeCollapsed, ...shellCollapsed, ...reasoningCollapsed].map((pair) => pair.item.id));
+  const unobservableTimelineChannels = [
+    nativeCollapsed.length > 0 ? "nativePlugin" : null,
+    shellCollapsed.length > 0 ? "shellSearch" : null,
+    reasoningCollapsed.length > 0 ? "reasoning" : null,
+  ].filter((channel) => channel !== null);
   const completedDiscoveryOperations = nativePairs.length + shellPairs.length;
   const turnStarted = selected.find((event) => event.type === "turn/started");
   const turnCompleted = selected.find((event) => event.type === "turn/completed");
@@ -178,13 +189,14 @@ export function collectAgentValueV4Metrics(rawEvents, expected) {
     completedDiscoveryOperations,
     nativePluginCalls: nativePairs.length,
     shellSearchCalls: shellPairs.length,
+    unobservableTimelineChannels,
   };
   if (timingStatus !== "complete") return { ...common, ...blankTiming() };
 
-  const nativePluginTimelineMs = mergeDuration(nativePairs.map(({ start, end }) => ({ start, end })));
-  const shellSearchTimelineMs = mergeDuration(shellPairs.map(({ start, end }) => ({ start, end })));
-  const reasoningTimelineMs = mergeDuration(reasoningPairs.map(({ start, end }) => ({ start, end })));
-  const classifiedTimelineMs = mergeDuration([
+  const nativePluginTimelineMs = nativeCollapsed.length > 0 ? null : mergeDuration(nativePairs.map(({ start, end }) => ({ start, end })));
+  const shellSearchTimelineMs = shellCollapsed.length > 0 ? null : mergeDuration(shellPairs.map(({ start, end }) => ({ start, end })));
+  const reasoningTimelineMs = reasoningCollapsed.length > 0 ? null : mergeDuration(reasoningPairs.map(({ start, end }) => ({ start, end })));
+  const classifiedTimelineMs = unobservableTimelineChannels.length > 0 ? null : mergeDuration([
     ...nativePairs,
     ...shellPairs,
     ...reasoningPairs,
@@ -197,6 +209,6 @@ export function collectAgentValueV4Metrics(rawEvents, expected) {
     shellSearchTimelineMs,
     reasoningTimelineMs,
     classifiedTimelineMs,
-    unaccountedTurnTimelineMs: turnTimelineMs - classifiedTimelineMs,
+    unaccountedTurnTimelineMs: classifiedTimelineMs === null ? null : turnTimelineMs - classifiedTimelineMs,
   };
 }

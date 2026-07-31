@@ -17092,6 +17092,17 @@ function candidateTraceNodes(index, matches, target) {
   const anchor = target?.anchor;
   const nameMatches = (node) => anchor !== void 0 && index.symbols[node].name === anchor;
   const ownerMatches = (node) => target?.owner !== void 0 && index.symbols[node].container === target.owner;
+  const named = /* @__PURE__ */ new Set();
+  for (const match of matches) {
+    for (const node of index.nodesByFile.get(matchIndexFile(match.file)) ?? []) {
+      if (index.symbols[node].name === match.pattern) named.add(node);
+    }
+  }
+  if (target?.owner !== void 0) {
+    const matchedOwned = [...named].filter((node) => nameMatches(node) && ownerMatches(node));
+    if (matchedOwned.length > 0) return matchedOwned;
+  }
+  if (named.size > 0) return [...named];
   if (target?.owner !== void 0) {
     const owned = /* @__PURE__ */ new Set();
     for (const node of index.symbols.keys()) {
@@ -17099,13 +17110,6 @@ function candidateTraceNodes(index, matches, target) {
     }
     if (owned.size > 0) return [...owned];
   }
-  const named = /* @__PURE__ */ new Set();
-  for (const match of matches) {
-    for (const node of index.nodesByFile.get(matchIndexFile(match.file)) ?? []) {
-      if (index.symbols[node].name === match.pattern) named.add(node);
-    }
-  }
-  if (named.size > 0) return [...named];
   if (anchor !== void 0) {
     for (const [node, symbol2] of index.symbols.entries()) {
       if (symbol2.name === anchor) named.add(node);
