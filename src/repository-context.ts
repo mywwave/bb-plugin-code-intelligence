@@ -43,7 +43,10 @@ const MANIFESTS = ["package.json", "pnpm-lock.yaml", "yarn.lock", "package-lock.
 const CHECKS = ["test", "typecheck", "lint"] as const;
 
 async function fileExists(path: string): Promise<boolean> {
-  return lstat(path).then((info) => info.isFile() && !info.isSymbolicLink(), () => false);
+  return lstat(path).then(
+    (info) => info.isFile() && !info.isSymbolicLink(),
+    () => false,
+  );
 }
 
 /** Reads no more than `maximum` bytes, even if a rule file is huge. */
@@ -85,9 +88,11 @@ function languagesIn(index: RetrievalIndex): Readonly<Record<string, number>> {
     }
     files.add(symbol.file);
   }
-  return Object.fromEntries([...filesByLanguage]
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([language, files]) => [language, files.size]));
+  return Object.fromEntries(
+    [...filesByLanguage]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([language, files]) => [language, files.size]),
+  );
 }
 
 function scriptsFrom(packageJson: string | null): Readonly<Partial<Record<RepositoryCheck, string>>> {
@@ -96,11 +101,11 @@ function scriptsFrom(packageJson: string | null): Readonly<Partial<Record<Reposi
     const parsed = JSON.parse(packageJson) as { scripts?: unknown };
     if (typeof parsed.scripts !== "object" || parsed.scripts === null) return {};
     const scripts = parsed.scripts as Record<string, unknown>;
-    return Object.fromEntries(CHECKS.flatMap((name) =>
-      typeof scripts[name] === "string" && scripts[name].trim() !== ""
-        ? [[name, scripts[name].trim()]]
-        : [],
-    ));
+    return Object.fromEntries(
+      CHECKS.flatMap((name) =>
+        typeof scripts[name] === "string" && scripts[name].trim() !== "" ? [[name, scripts[name].trim()]] : [],
+      ),
+    );
   } catch {
     return {};
   }
@@ -108,21 +113,31 @@ function scriptsFrom(packageJson: string | null): Readonly<Partial<Record<Reposi
 
 /** Builds an allowlisted repository snapshot for the selected root. */
 export async function buildRepositoryContext(root: string, index: RetrievalIndex): Promise<RepositoryContext> {
-  const manifestFlags = await Promise.all(MANIFESTS.map(async (name) => [name, await fileExists(join(root, name))] as const));
+  const manifestFlags = await Promise.all(
+    MANIFESTS.map(async (name) => [name, await fileExists(join(root, name))] as const),
+  );
   const manifests = manifestFlags.filter(([, exists]) => exists).map(([name]) => name);
   const packageJson = manifests.includes("package.json")
     ? await readBounded(join(root, "package.json"), 256 * 1024)
     : null;
-  const rules = (await Promise.all(RULE_FILES.map(async (name) => {
-    const path = join(root, name);
-    if (!await fileExists(path)) return null;
-    return { path: name, content: await readBounded(path, MAX_RULE_BYTES) };
-  }))).filter((rule): rule is RepositoryRule => rule !== null);
-  const overview = (await Promise.all(OVERVIEW_FILES.map(async (name) => {
-    const path = join(root, name);
-    if (!await fileExists(path)) return null;
-    return { path: name, content: await readBounded(path, MAX_OVERVIEW_BYTES) };
-  }))).filter((file): file is RepositoryOverview => file !== null);
+  const rules = (
+    await Promise.all(
+      RULE_FILES.map(async (name) => {
+        const path = join(root, name);
+        if (!(await fileExists(path))) return null;
+        return { path: name, content: await readBounded(path, MAX_RULE_BYTES) };
+      }),
+    )
+  ).filter((rule): rule is RepositoryRule => rule !== null);
+  const overview = (
+    await Promise.all(
+      OVERVIEW_FILES.map(async (name) => {
+        const path = join(root, name);
+        if (!(await fileExists(path))) return null;
+        return { path: name, content: await readBounded(path, MAX_OVERVIEW_BYTES) };
+      }),
+    )
+  ).filter((file): file is RepositoryOverview => file !== null);
 
   return {
     root,
@@ -177,6 +192,8 @@ export function repositoryContextSummary(context: RepositoryContext): string {
     Object.keys(context.scripts).length > 0 ? `checks: ${Object.keys(context.scripts).join(",")}` : null,
     context.rules.length > 0 ? `rules: ${context.rules.map((rule) => rule.path).join(",")}` : null,
     context.overview.length > 0 ? `overview: ${context.overview.map((file) => file.path).join(",")}` : null,
-  ].filter((part): part is string => part !== null).join("; ");
+  ]
+    .filter((part): part is string => part !== null)
+    .join("; ");
   return parts.slice(0, 700);
 }

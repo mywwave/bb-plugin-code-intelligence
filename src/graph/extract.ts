@@ -176,11 +176,7 @@ function functionBinding(node: AstNode): { name: string; kind: SymbolKind } | nu
   return null;
 }
 
-export async function extractFile(
-  file: string,
-  language: LanguageId,
-  source: string,
-): Promise<FileExtraction> {
+export async function extractFile(file: string, language: LanguageId, source: string): Promise<FileExtraction> {
   const root = await parseSource(language, source);
 
   const symbols: CodeSymbol[] = [];
@@ -201,12 +197,7 @@ export async function extractFile(
   const MAX_DEPTH = 400;
   let truncated = false;
 
-  const visit = (
-    node: AstNode,
-    enclosing: string | null,
-    container: string | null,
-    depth: number,
-  ): void => {
+  const visit = (node: AstNode, enclosing: string | null, container: string | null, depth: number): void => {
     if (depth > MAX_DEPTH) {
       truncated = true;
       return;
@@ -219,38 +210,36 @@ export async function extractFile(
 
     const definition = definitionFor(node, language, nextContainer);
     if (definition !== null) {
-        const symbolContainer = definition.kind === "method"
-          ? (definition.container ?? nextContainer)
-          : null;
-        const id = symbolId(file, definition.name, definition.kind, symbolContainer, node.startPosition);
-        symbols.push({
-          id,
-          name: definition.name,
-          kind: definition.kind,
-          container: symbolContainer,
-          file,
-          startLine: node.startPosition.row,
-          endLine: node.endPosition.row,
-          tokens: estimateTokens(node),
-        });
-        nextEnclosing = id;
-        if (definition.kind === "class") {
-          nextContainer = definition.name;
-          typeRelations.push(...declaredTypeRelations(node, language, file, definition.name));
-        }
+      const symbolContainer = definition.kind === "method" ? (definition.container ?? nextContainer) : null;
+      const id = symbolId(file, definition.name, definition.kind, symbolContainer, node.startPosition);
+      symbols.push({
+        id,
+        name: definition.name,
+        kind: definition.kind,
+        container: symbolContainer,
+        file,
+        startLine: node.startPosition.row,
+        endLine: node.endPosition.row,
+        tokens: estimateTokens(node),
+      });
+      nextEnclosing = id;
+      if (definition.kind === "class") {
+        nextContainer = definition.name;
+        typeRelations.push(...declaredTypeRelations(node, language, file, definition.name));
+      }
     }
 
     collectTypeBindings(node, language, file, nextContainer, types);
 
     const call = callFor(node, language);
     if (call !== null) {
-          calls.push({
-            fromSymbolId: nextEnclosing,
-            name: call.name,
-            receiver: call.receiver,
-            file,
-            line: node.startPosition.row,
-          });
+      calls.push({
+        fromSymbolId: nextEnclosing,
+        name: call.name,
+        receiver: call.receiver,
+        file,
+        line: node.startPosition.row,
+      });
     }
 
     /**
@@ -308,19 +297,26 @@ function declaredTypeRelations(
   // constraints, type arguments, or Python class keywords with supertypes.
   const relations: TypeRelation[] = [];
   const children = (parent: AstNode): AstNode[] =>
-    Array.from({ length: parent.namedChildCount }, (_, index) => parent.namedChild(index))
-      .filter((child): child is AstNode => child !== null);
+    Array.from({ length: parent.namedChildCount }, (_, index) => parent.namedChild(index)).filter(
+      (child): child is AstNode => child !== null,
+    );
   const child = (parent: AstNode, type: string): AstNode | undefined =>
     children(parent).find((candidate) => candidate.type === type);
   const typeName = (candidate: AstNode): string | undefined => {
-    if (["identifier", "type_identifier", "scoped_type_identifier", "property_identifier", "field_identifier"].includes(candidate.type)) {
+    if (
+      ["identifier", "type_identifier", "scoped_type_identifier", "property_identifier", "field_identifier"].includes(
+        candidate.type,
+      )
+    ) {
       return candidate.text.split(".").at(-1);
     }
     if (["attribute", "member_expression"].includes(candidate.type)) {
       const terminal = children(candidate).at(-1);
       return terminal === undefined ? undefined : typeName(terminal);
     }
-    return children(candidate).map(typeName).find((name): name is string => name !== undefined);
+    return children(candidate)
+      .map(typeName)
+      .find((name): name is string => name !== undefined);
   };
   const add = (candidate: AstNode, kind: TypeRelation["kind"]) => {
     const supertype = typeName(candidate);
@@ -456,7 +452,7 @@ function receiverTypeName(node: AstNode): string | null {
   if (parameter === null) return null;
   const type = parameter.childForFieldName("type");
   if (type === null) return null;
-  return type.type === "pointer_type" ? type.namedChild(0)?.text ?? null : type.text;
+  return type.type === "pointer_type" ? (type.namedChild(0)?.text ?? null) : type.text;
 }
 
 /** Reads a `: Foo` annotation or a `new Foo()` initialiser into a type name. */
@@ -501,9 +497,10 @@ function collectTypeBindings(
   }
 
   if (language === "java" && (node.type === "field_declaration" || node.type === "formal_parameter")) {
-    const nameNode = node.type === "field_declaration"
-      ? node.childForFieldName("declarator")?.childForFieldName("name") ?? null
-      : node.childForFieldName("name");
+    const nameNode =
+      node.type === "field_declaration"
+        ? (node.childForFieldName("declarator")?.childForFieldName("name") ?? null)
+        : node.childForFieldName("name");
     const type = node.childForFieldName("type");
     if (nameNode !== null && type !== null) {
       out.push({ file, name: nameNode.text, type: type.text, container });
@@ -530,8 +527,7 @@ function readCallee(callee: AstNode): { name: string; receiver: string | null } 
     return { name: callee.text, receiver: null };
   }
   if (callee.type === "member_expression" || callee.type === "attribute") {
-    const property =
-      callee.childForFieldName("property") ?? callee.childForFieldName("attribute");
+    const property = callee.childForFieldName("property") ?? callee.childForFieldName("attribute");
     const object = callee.childForFieldName("object");
     if (property === null) return null;
     return { name: property.text, receiver: object?.text ?? null };
@@ -603,7 +599,11 @@ function collectImports(node: AstNode, language: LanguageId, file: string, out: 
     const path = node.childForFieldName("path");
     if (path === null || !path.text.startsWith('"')) return;
     const source = stripQuotes(path.text);
-    const local = source.split("/").pop()?.replace(/\.[^.]+$/, "") ?? "";
+    const local =
+      source
+        .split("/")
+        .pop()
+        ?.replace(/\.[^.]+$/, "") ?? "";
     if (local !== "") out.push({ file, source: source.startsWith(".") ? source : `./${source}`, local });
     return;
   }

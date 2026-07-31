@@ -32,10 +32,7 @@ async function gitPath(root, args) {
 
 export async function installPrePushHook(root = process.cwd()) {
   const repositoryRoot = resolve(root);
-  const hooksDirectory = resolve(
-    repositoryRoot,
-    await gitPath(repositoryRoot, ["rev-parse", "--git-path", "hooks"]),
-  );
+  const hooksDirectory = resolve(repositoryRoot, await gitPath(repositoryRoot, ["rev-parse", "--git-path", "hooks"]));
   const target = resolve(hooksDirectory, "pre-push");
   const current = await readOptionalFile(target);
 

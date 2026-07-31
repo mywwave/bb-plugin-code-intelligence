@@ -4,16 +4,7 @@ import { parseContextArgs } from "../src/cli.js";
 
 describe("parseContextArgs", () => {
   it("separates seeds from root and budget options", () => {
-    expect(
-      parseContextArgs([
-        "src/server.ts",
-        "handleRequest",
-        "--root",
-        "/repo/one",
-        "--budget",
-        "2500",
-      ]),
-    ).toEqual({
+    expect(parseContextArgs(["src/server.ts", "handleRequest", "--root", "/repo/one", "--budget", "2500"])).toEqual({
       seeds: ["src/server.ts", "handleRequest"],
       question: null,
       root: "/repo/one",
@@ -56,12 +47,8 @@ describe("parseContextArgs", () => {
 
   it("returns actionable errors for malformed options", () => {
     expect(parseContextArgs(["seed", "--root"]).error).toBe("--root requires a path");
-    expect(parseContextArgs(["seed", "--budget", "nope"]).error).toBe(
-      "--budget must be a positive number",
-    );
-    expect(parseContextArgs(["--root", "/repo"]).error).toBe(
-      "give at least one seed, or --question <text>",
-    );
+    expect(parseContextArgs(["seed", "--budget", "nope"]).error).toBe("--budget must be a positive number");
+    expect(parseContextArgs(["--root", "/repo"]).error).toBe("give at least one seed, or --question <text>");
     expect(parseContextArgs(["--question"]).error).toBe("--question requires text");
     expect(parseContextArgs(["seed", "--unknown"]).error).toBe("unknown option: --unknown");
   });

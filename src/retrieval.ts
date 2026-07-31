@@ -22,11 +22,7 @@
 import { diffuse } from "./math/diffusion.js";
 import { buildSymmetricAdjacency, type Edge, type SparseMatrix } from "./math/sparse.js";
 import type { CodeSymbol } from "./graph/extract.js";
-import {
-  EMPTY_COCHANGE,
-  cochangeScoresForSeeds,
-  type CochangeIndex,
-} from "./cochange.js";
+import { EMPTY_COCHANGE, cochangeScoresForSeeds, type CochangeIndex } from "./cochange.js";
 
 /** Diffusion scale. Measured optimum on the benchmark; t=2 and above lose recall. */
 const DIFFUSION_T = 1;
@@ -73,8 +69,10 @@ const QUESTION_STRUCTURAL_WEIGHT = 0.3;
 const STOPWORD_DOCUMENT_RATIO = 0.15;
 
 const LANGUAGE_STOPWORDS = new Set(
-  ("the and for this that new const let return function class import export from type " +
-    "interface async await if else true false null undefined string number void any").split(" "),
+  (
+    "the and for this that new const let return function class import export from type " +
+    "interface async await if else true false null undefined string number void any"
+  ).split(" "),
 );
 
 export interface RetrievalIndex {
@@ -419,10 +417,7 @@ export function buildIndex(
 }
 
 /** Cosine of every symbol against one normalised sparse vector. */
-function cosineAgainst(
-  index: RetrievalIndex,
-  query: ReadonlyMap<string, number>,
-): Float64Array {
+function cosineAgainst(index: RetrievalIndex, query: ReadonlyMap<string, number>): Float64Array {
   const out = new Float64Array(index.symbols.length);
   for (let i = 0; i < index.symbols.length; i++) {
     const vector = index.lexicalVectors[i]!;
@@ -555,9 +550,7 @@ export function retrieve(index: RetrievalIndex, options: RetrieveOptions): Retri
    * actually tied to what the caller wants, would drop out after being used
    * once to pick them.
    */
-  const lexical = byQuestion
-    ? cosineAgainst(index, questionVector(options.question!))
-    : null;
+  const lexical = byQuestion ? cosineAgainst(index, questionVector(options.question!)) : null;
 
   const seedNodes = byQuestion ? topLexicalNodes(lexical!, options.questionSeedCount ?? 10) : given;
   if (seedNodes.length === 0) {
@@ -735,10 +728,7 @@ function blastRadiusOf(index: RetrievalIndex, roots: readonly number[]): BlastRa
     const symbol = index.symbols[node]!;
     const files = [...new Set(callers.map((caller) => index.symbols[caller]!.file))];
     const testFiles = [
-      ...new Set([
-        ...files.filter(isTestFile),
-        ...(index.importersOf.get(node) ?? []).filter(isTestFile),
-      ]),
+      ...new Set([...files.filter(isTestFile), ...(index.importersOf.get(node) ?? []).filter(isTestFile)]),
     ];
     out.push({
       id: symbol.id,

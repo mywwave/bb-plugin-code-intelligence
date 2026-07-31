@@ -86,7 +86,10 @@ function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
     edges: [{ from: "src/a.ts#f", to: "src/b.ts#g", weight: 0.9, strategy: "sameFile" }],
     typeRelations: [],
     extractions: [fileExtraction],
-    fileHashes: new Map([["src/a.ts", "aaa"], ["src/b.ts", "bbb"]]),
+    fileHashes: new Map([
+      ["src/a.ts", "aaa"],
+      ["src/b.ts", "bbb"],
+    ]),
     ambiguousCalls: 3,
     completeness: 0.62,
     completenessReliable: true,
@@ -172,7 +175,10 @@ describe("checkFreshness", () => {
   it("reports an unchanged tree as up to date", () => {
     const report = checkFreshness(
       snapshot(),
-      new Map([["src/a.ts", "aaa"], ["src/b.ts", "bbb"]]),
+      new Map([
+        ["src/a.ts", "aaa"],
+        ["src/b.ts", "bbb"],
+      ]),
     );
 
     expect(report.upToDate).toBe(true);
@@ -182,7 +188,10 @@ describe("checkFreshness", () => {
   it("separates changed, added and removed files", () => {
     const report = checkFreshness(
       snapshot(),
-      new Map([["src/a.ts", "CHANGED"], ["src/c.ts", "ccc"]]),
+      new Map([
+        ["src/a.ts", "CHANGED"],
+        ["src/c.ts", "ccc"],
+      ]),
     );
 
     expect(report.changed).toEqual(["src/a.ts"]);
@@ -196,7 +205,10 @@ describe("checkFreshness", () => {
     // moved back; hashing does not.
     const report = checkFreshness(
       snapshot(),
-      new Map([["src/a.ts", "different"], ["src/b.ts", "bbb"]]),
+      new Map([
+        ["src/a.ts", "different"],
+        ["src/b.ts", "bbb"],
+      ]),
     );
 
     expect(report.upToDate).toBe(false);
@@ -205,7 +217,13 @@ describe("checkFreshness", () => {
 
   it("spells out staleness for the agent", () => {
     const note = stalenessNote(
-      checkFreshness(snapshot(), new Map([["src/a.ts", "x"], ["src/c.ts", "y"]])),
+      checkFreshness(
+        snapshot(),
+        new Map([
+          ["src/a.ts", "x"],
+          ["src/c.ts", "y"],
+        ]),
+      ),
     )!;
 
     expect(note).toContain("1 changed");

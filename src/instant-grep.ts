@@ -122,7 +122,17 @@ function searchFlags(options: InstantGrepOptions): string[] {
 /** Public for argument-level tests; process creation remains private. */
 export function buildInstantGrepArgs(options: InstantGrepOptions): string[] {
   validateOptions(options);
-  return ["--json", "--line-number", "--no-heading", "--color", "never", ...searchFlags(options), "--", options.pattern, "."];
+  return [
+    "--json",
+    "--line-number",
+    "--no-heading",
+    "--color",
+    "never",
+    ...searchFlags(options),
+    "--",
+    options.pattern,
+    ".",
+  ];
 }
 
 function appendBounded(value: string, chunk: string, limit = 16_384): string {
@@ -180,7 +190,9 @@ function collectNullRecords(
       }
     });
     child.stderr.setEncoding("utf8");
-    child.stderr.on("data", (chunk: string) => { stderr = appendBounded(stderr, chunk); });
+    child.stderr.on("data", (chunk: string) => {
+      stderr = appendBounded(stderr, chunk);
+    });
     child.on("error", (error: NodeJS.ErrnoException) => {
       fail(error.code === "ENOENT" ? new Error("instant_grep requires ripgrep (`rg`) on the BB server host") : error);
     });
@@ -188,7 +200,8 @@ function collectNullRecords(
       if (settled) return;
       settled = true;
       signal?.removeEventListener("abort", abort);
-      if (code === 0 || code === 1) resolve({ records: records.slice(0, limit), totalExceedsLimit: records.length > limit });
+      if (code === 0 || code === 1)
+        resolve({ records: records.slice(0, limit), totalExceedsLimit: records.length > limit });
       else reject(new Error(stderr.trim() || `ripgrep exited with code ${code ?? "unknown"}`));
     });
     if (signal?.aborted) abort();
@@ -218,11 +231,8 @@ function collectCountRecords(
     const record = (file: string, countText: string) => {
       const count = Number(countText);
       if (!Number.isInteger(count)) return;
-      insertSorted(
-        counts,
-        { file: normalizeInstantGrepFile(file), count },
-        limit,
-        (left, right) => left.file.localeCompare(right.file),
+      insertSorted(counts, { file: normalizeInstantGrepFile(file), count }, limit, (left, right) =>
+        left.file.localeCompare(right.file),
       );
     };
     child.stdout.setEncoding("utf8");
@@ -238,7 +248,9 @@ function collectCountRecords(
       }
     });
     child.stderr.setEncoding("utf8");
-    child.stderr.on("data", (chunk: string) => { stderr = appendBounded(stderr, chunk); });
+    child.stderr.on("data", (chunk: string) => {
+      stderr = appendBounded(stderr, chunk);
+    });
     child.on("error", (error: NodeJS.ErrnoException) => {
       fail(error.code === "ENOENT" ? new Error("instant_grep requires ripgrep (`rg`) on the BB server host") : error);
     });
@@ -246,7 +258,8 @@ function collectCountRecords(
       if (settled) return;
       settled = true;
       signal?.removeEventListener("abort", abort);
-      if (code === 0 || code === 1) resolve({ counts: counts.slice(0, limit), totalExceedsLimit: counts.length > limit });
+      if (code === 0 || code === 1)
+        resolve({ counts: counts.slice(0, limit), totalExceedsLimit: counts.length > limit });
       else reject(new Error(stderr.trim() || `ripgrep exited with code ${code ?? "unknown"}`));
     });
     if (signal?.aborted) abort();
@@ -254,31 +267,45 @@ function collectCountRecords(
   });
 }
 
-async function attachContext(root: string, matches: readonly InstantGrepMatch[], before: number, after: number): Promise<readonly InstantGrepMatch[]> {
+async function attachContext(
+  root: string,
+  matches: readonly InstantGrepMatch[],
+  before: number,
+  after: number,
+): Promise<readonly InstantGrepMatch[]> {
   if (before === 0 && after === 0) return matches;
   const sourceByFile = new Map<string, readonly string[]>();
-  return Promise.all(matches.map(async (match) => {
-    let lines = sourceByFile.get(match.file);
-    if (lines === undefined) {
-      try {
-        lines = (await readFile(join(root, match.file), "utf8")).split(/\r?\n/);
-      } catch {
-        return match;
+  return Promise.all(
+    matches.map(async (match) => {
+      let lines = sourceByFile.get(match.file);
+      if (lines === undefined) {
+        try {
+          lines = (await readFile(join(root, match.file), "utf8")).split(/\r?\n/);
+        } catch {
+          return match;
+        }
+        sourceByFile.set(match.file, lines);
       }
-      sourceByFile.set(match.file, lines);
-    }
-    const index = match.line - 1;
-    const make = (start: number, end: number): InstantGrepContextLine[] =>
-      lines!.slice(Math.max(0, start), Math.min(lines!.length, end)).map((text, position) => ({ line: Math.max(0, start) + position + 1, text }));
-    return {
-      ...match,
-      ...(before === 0 ? {} : { before: make(index - before, index) }),
-      ...(after === 0 ? {} : { after: make(index + 1, index + 1 + after) }),
-    };
-  }));
+      const index = match.line - 1;
+      const make = (start: number, end: number): InstantGrepContextLine[] =>
+        lines!
+          .slice(Math.max(0, start), Math.min(lines!.length, end))
+          .map((text, position) => ({ line: Math.max(0, start) + position + 1, text }));
+      return {
+        ...match,
+        ...(before === 0 ? {} : { before: make(index - before, index) }),
+        ...(after === 0 ? {} : { after: make(index + 1, index + 1 + after) }),
+      };
+    }),
+  );
 }
 
-function streamContentSearch(root: string, options: InstantGrepOptions, limit: number, offset: number): Promise<{ matches: readonly InstantGrepMatch[]; truncated: boolean }> {
+function streamContentSearch(
+  root: string,
+  options: InstantGrepOptions,
+  limit: number,
+  offset: number,
+): Promise<{ matches: readonly InstantGrepMatch[]; truncated: boolean }> {
   const args = buildInstantGrepArgs(options);
   return new Promise((resolve, reject) => {
     const child = spawn("rg", args, { cwd: root, stdio: ["ignore", "pipe", "pipe"] });
@@ -307,7 +334,11 @@ function streamContentSearch(root: string, options: InstantGrepOptions, limit: n
     const parse = (line: string) => {
       if (line === "" || stoppedAtLimit) return;
       let event: RipgrepEvent;
-      try { event = JSON.parse(line) as RipgrepEvent; } catch { return; }
+      try {
+        event = JSON.parse(line) as RipgrepEvent;
+      } catch {
+        return;
+      }
       if (event.type !== "match") return;
       const file = event.data?.path?.text;
       const lineNumber = event.data?.line_number;
@@ -334,7 +365,9 @@ function streamContentSearch(root: string, options: InstantGrepOptions, limit: n
       }
     });
     child.stderr.setEncoding("utf8");
-    child.stderr.on("data", (chunk: string) => { stderr = appendBounded(stderr, chunk); });
+    child.stderr.on("data", (chunk: string) => {
+      stderr = appendBounded(stderr, chunk);
+    });
     child.on("error", (error: NodeJS.ErrnoException) => {
       fail(error.code === "ENOENT" ? new Error("instant_grep requires ripgrep (`rg`) on the BB server host") : error);
     });
@@ -353,7 +386,12 @@ async function contentSearch(root: string, options: InstantGrepOptions): Promise
   const limit = normalizedLimit(options.limit);
   const offset = normalizedNonNegative(options.offset, "offset", 100_000);
   const page = await streamContentSearch(root, options, limit, offset);
-  const matches = await attachContext(root, page.matches, normalizedNonNegative(options.beforeContext, "beforeContext", MAX_CONTEXT_LINES), normalizedNonNegative(options.afterContext, "afterContext", MAX_CONTEXT_LINES));
+  const matches = await attachContext(
+    root,
+    page.matches,
+    normalizedNonNegative(options.beforeContext, "beforeContext", MAX_CONTEXT_LINES),
+    normalizedNonNegative(options.afterContext, "afterContext", MAX_CONTEXT_LINES),
+  );
   return {
     matches,
     truncated: page.truncated,
@@ -363,13 +401,23 @@ async function contentSearch(root: string, options: InstantGrepOptions): Promise
 
 async function fileListSearch(root: string, options: InstantGrepOptions): Promise<InstantGrepResult> {
   const limit = normalizedLimit(options.limit);
-  const result = await collectNullRecords(root, ["--null", "--files-with-matches", ...searchFlags(options), "--", options.pattern, "."], limit, options.signal);
+  const result = await collectNullRecords(
+    root,
+    ["--null", "--files-with-matches", ...searchFlags(options), "--", options.pattern, "."],
+    limit,
+    options.signal,
+  );
   return { matches: [], files: result.records, truncated: result.totalExceedsLimit };
 }
 
 async function countSearch(root: string, options: InstantGrepOptions): Promise<InstantGrepResult> {
   const limit = normalizedLimit(options.limit);
-  const result = await collectCountRecords(root, ["--null", "--count", ...searchFlags(options), "--", options.pattern, "."], limit, options.signal);
+  const result = await collectCountRecords(
+    root,
+    ["--null", "--count", ...searchFlags(options), "--", options.pattern, "."],
+    limit,
+    options.signal,
+  );
   return { matches: [], counts: result.counts, truncated: result.totalExceedsLimit };
 }
 
@@ -377,9 +425,12 @@ async function countSearch(root: string, options: InstantGrepOptions): Promise<I
 export async function instantGrep(root: string, options: InstantGrepOptions): Promise<InstantGrepResult> {
   validateOptions(options);
   switch (options.outputMode ?? "content") {
-    case "files_with_matches": return fileListSearch(root, options);
-    case "count": return countSearch(root, options);
-    default: return contentSearch(root, options);
+    case "files_with_matches":
+      return fileListSearch(root, options);
+    case "count":
+      return countSearch(root, options);
+    default:
+      return contentSearch(root, options);
   }
 }
 
@@ -415,9 +466,10 @@ function globMatches(path: string, glob: string | undefined): boolean {
 
 function sourceMatcher(options: InstantGrepOptions): (line: string) => boolean {
   const flags = options.caseSensitive === false ? "i" : "";
-  const expression = options.regex === true
-    ? new RegExp(options.pattern, flags)
-    : new RegExp(options.pattern.replace(/[|\\{}()[\]^$+*?.]/g, "\\$&"), flags);
+  const expression =
+    options.regex === true
+      ? new RegExp(options.pattern, flags)
+      : new RegExp(options.pattern.replace(/[|\\{}()[\]^$+*?.]/g, "\\$&"), flags);
   if (options.word !== true) return (line) => expression.test(line);
   const wordExpression = new RegExp(`\\b(?:${expression.source})\\b`, flags);
   return (line) => wordExpression.test(line);
@@ -444,9 +496,7 @@ export async function instantGrepSources(
  * The remote engine otherwise repeated both O(files log files) sorting and
  * O(total source bytes) splitting for every agent search over the same index.
  */
-export function prepareInstantGrepSources(
-  sources: ReadonlyMap<string, string>,
-): readonly PreparedInstantGrepSource[] {
+export function prepareInstantGrepSources(sources: ReadonlyMap<string, string>): readonly PreparedInstantGrepSource[] {
   return [...sources.entries()]
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([file, source]) => ({ file, lines: source.split("\n") }));
@@ -470,7 +520,7 @@ export async function instantGrepPreparedSources(
   for (const { file, lines } of sources) {
     if (options.signal?.aborted) throw new Error("instant_grep aborted");
     if (!globMatches(file, options.glob)) continue;
-    const lineIndexes = lines.flatMap((line, index) => matchesLine(line) ? [index] : []);
+    const lineIndexes = lines.flatMap((line, index) => (matchesLine(line) ? [index] : []));
     if (lineIndexes.length === 0) continue;
     if ((options.outputMode ?? "content") === "files_with_matches") {
       files.push(normalizeInstantGrepFile(file));
@@ -485,14 +535,20 @@ export async function instantGrepPreparedSources(
         file: normalizeInstantGrepFile(file),
         line: index + 1,
         text: lines[index]!,
-        ...(beforeCount > 0 ? {
-          before: lines.slice(Math.max(0, index - beforeCount), index)
-            .map((text, beforeIndex) => ({ line: Math.max(0, index - beforeCount) + beforeIndex + 1, text })),
-        } : {}),
-        ...(afterCount > 0 ? {
-          after: lines.slice(index + 1, index + 1 + afterCount)
-            .map((text, afterIndex) => ({ line: index + afterIndex + 2, text })),
-        } : {}),
+        ...(beforeCount > 0
+          ? {
+              before: lines
+                .slice(Math.max(0, index - beforeCount), index)
+                .map((text, beforeIndex) => ({ line: Math.max(0, index - beforeCount) + beforeIndex + 1, text })),
+            }
+          : {}),
+        ...(afterCount > 0
+          ? {
+              after: lines
+                .slice(index + 1, index + 1 + afterCount)
+                .map((text, afterIndex) => ({ line: index + afterIndex + 2, text })),
+            }
+          : {}),
       });
     }
   }
@@ -517,7 +573,12 @@ export async function instantGrepPreparedSources(
  * Each result is kept separate so regex/literal semantics never bleed across
  * patterns.
  */
-export async function instantGrepBatch(root: string, options: readonly InstantGrepOptions[]): Promise<readonly InstantGrepBatchResult[]> {
+export async function instantGrepBatch(
+  root: string,
+  options: readonly InstantGrepOptions[],
+): Promise<readonly InstantGrepBatchResult[]> {
   if (options.length === 0 || options.length > 10) throw new Error("patterns must contain from 1 through 10 entries");
-  return Promise.all(options.map(async (option) => ({ pattern: option.pattern, ...(await instantGrep(root, option)) })));
+  return Promise.all(
+    options.map(async (option) => ({ pattern: option.pattern, ...(await instantGrep(root, option)) })),
+  );
 }

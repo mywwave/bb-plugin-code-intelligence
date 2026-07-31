@@ -1,5 +1,6 @@
 dist/*.map
 node_modules/
+.worktrees/
 .playwright-cli/
 .DS_Store
 coverage/

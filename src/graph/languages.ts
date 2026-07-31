@@ -12,16 +12,7 @@ import { createRequire } from "node:module";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export type LanguageId =
-  | "typescript"
-  | "tsx"
-  | "javascript"
-  | "python"
-  | "go"
-  | "rust"
-  | "c"
-  | "cpp"
-  | "java";
+export type LanguageId = "typescript" | "tsx" | "javascript" | "python" | "go" | "rust" | "c" | "cpp" | "java";
 
 export type GrammarId = Exclude<LanguageId, "c">;
 
@@ -104,9 +95,7 @@ function runtimeDir(): string {
   const bundled = bundledRuntimeDir();
   if (bundled !== null) return bundled;
   const require = createRequire(import.meta.url);
-  return require
-    .resolve("@vscode/tree-sitter-wasm/wasm/tree-sitter.js")
-    .replace(/[/\\]tree-sitter\.js$/, "");
+  return require.resolve("@vscode/tree-sitter-wasm/wasm/tree-sitter.js").replace(/[/\\]tree-sitter\.js$/, "");
 }
 
 /**
@@ -127,8 +116,7 @@ function loadRuntime() {
     const generation = runtimeGeneration;
     runtime = (async () => {
       const dir = runtimeDir();
-      const specifier =
-        generation === 0 ? `${dir}/tree-sitter.js` : `${dir}/tree-sitter.js?reload=${generation}`;
+      const specifier = generation === 0 ? `${dir}/tree-sitter.js` : `${dir}/tree-sitter.js?reload=${generation}`;
       const imported = await import(specifier);
       const api = imported.default ?? imported;
       await api.Parser.init({ locateFile: () => `${dir}/tree-sitter.wasm` });
@@ -175,9 +163,7 @@ function isRuntimeAbort(error: unknown): boolean {
   if (typeof WebAssembly !== "undefined" && error instanceof WebAssembly.RuntimeError) return true;
   const message = error instanceof Error ? error.message : String(error);
   return (
-    message.includes("Aborted") ||
-    message.includes("memory access out of bounds") ||
-    message.includes("out of memory")
+    message.includes("Aborted") || message.includes("memory access out of bounds") || message.includes("out of memory")
   );
 }
 

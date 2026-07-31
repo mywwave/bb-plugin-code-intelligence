@@ -31,10 +31,7 @@ export interface ProjectLike {
  * Remote sources are skipped: this plugin scans the server's own filesystem, so
  * a path belonging to another host would be indexed from the wrong disk.
  */
-export function readProjectPath(
-  project: ProjectLike | null | undefined,
-  hostId?: string,
-): string | null {
+export function readProjectPath(project: ProjectLike | null | undefined, hostId?: string): string | null {
   if (project === null || project === undefined) return null;
 
   const sources = Array.isArray(project.sources) ? project.sources : [];

@@ -39,6 +39,7 @@
     "@types/react": "^19.2.18",
     "better-sqlite3": "^12.0.0",
     "hono": "^4.11.9",
+    "prettier": "3.8.3",
     "typescript": "^5.7.0",
     "vitest": "^3.2.7",
     "zod": "^4.3.6"
@@ -49,9 +50,11 @@
     "zod": "^4.3.6"
   },
   "scripts": {
+    "format": "prettier . --write",
+    "format:check": "prettier . --check",
     "test": "vitest run",
     "typecheck": "tsc --noEmit --noUnusedLocals --noUnusedParameters",
-    "verify": "npm run typecheck && npm test",
+    "verify": "npm run format:check && npm run typecheck && npm test",
     "check": "npm run verify:release",
     "build:plugin": "NODE_PATH=./node_modules bb plugin build . && node scripts/copy-tree-sitter-assets.js",
     "verify:release": "npm run verify && npm run build:plugin && node scripts/verify-release.js && node scripts/verify-clean-dist.js",

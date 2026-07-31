@@ -42,9 +42,7 @@ describe("analyzeImpact", () => {
       { file: "src/orders/create.test.ts", targets: [target.id], evidence: ["call"] },
       { file: "src/payments/charge.test.ts", targets: [target.id], evidence: ["import"] },
     ]);
-    expect(report.productionImports).toEqual([
-      { file: "src/orders/charge-constants.ts", targets: [target.id] },
-    ]);
+    expect(report.productionImports).toEqual([{ file: "src/orders/charge-constants.ts", targets: [target.id] }]);
   });
 
   it("accepts exact files but refuses to guess an overloaded bare symbol", () => {
@@ -53,7 +51,10 @@ describe("analyzeImpact", () => {
     expect(report.targets.map((entry) => entry.id)).toEqual([target.id]);
     expect(report.unresolved).toEqual(["missingTarget"]);
     expect(report.ambiguous).toEqual([
-      expect.objectContaining({ requested: "charge", matches: expect.arrayContaining([expect.objectContaining({ id: target.id })]) }),
+      expect.objectContaining({
+        requested: "charge",
+        matches: expect.arrayContaining([expect.objectContaining({ id: target.id })]),
+      }),
     ]);
   });
 });

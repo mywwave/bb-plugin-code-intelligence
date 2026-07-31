@@ -133,11 +133,7 @@ export function blankNonCode(source: string): string {
 /**
  * @param startLine 0-based line of the body within its file
  */
-export function findDynamicBoundaries(
-  file: string,
-  body: string,
-  startLine: number,
-): DynamicBoundary[] {
+export function findDynamicBoundaries(file: string, body: string, startLine: number): DynamicBoundary[] {
   const scanned = blankNonCode(body);
   const found: DynamicBoundary[] = [];
   const seen = new Set<string>();
@@ -149,10 +145,7 @@ export function findDynamicBoundaries(
       const line = startLine + countLines(scanned.slice(0, match.index)) + 1;
       // Keys are read from the ORIGINAL text: the scanned copy has its string
       // contents blanked, which is exactly what the key lives in.
-      const key = form.keyOf?.(
-        form.pattern.exec(body.slice(match.index, match.index + match[0].length)) ??
-          match,
-      );
+      const key = form.keyOf?.(form.pattern.exec(body.slice(match.index, match.index + match[0].length)) ?? match);
       // One report per form and line: a loop calling `handlers[k]()` twice is
       // one boundary, not two.
       const id = `${form.form}:${line}`;

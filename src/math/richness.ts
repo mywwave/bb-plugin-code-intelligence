@@ -94,19 +94,12 @@ const Z_95 = 1.959963984540054;
  * They are therefore added to the denominator directly rather than
  * extrapolated: counting is strictly better evidence than estimating.
  */
-export function chao1(
-  observed: number,
-  singletons: number,
-  doubletons: number,
-  knownMissing = 0,
-): RichnessEstimate {
+export function chao1(observed: number, singletons: number, doubletons: number, knownMissing = 0): RichnessEstimate {
   if (observed < 0 || singletons < 0 || doubletons < 0) {
     throw new Error("counts must be non-negative");
   }
   if (singletons + doubletons > observed) {
-    throw new Error(
-      `f₁ + f₂ (${singletons + doubletons}) cannot exceed observed (${observed})`,
-    );
+    throw new Error(`f₁ + f₂ (${singletons + doubletons}) cannot exceed observed (${observed})`);
   }
   if (knownMissing < 0) throw new Error("knownMissing must be non-negative");
 
@@ -125,9 +118,7 @@ export function chao1(
   const ciLower = lower + knownMissing;
   const ciUpper = upper + knownMissing;
 
-  const reliable =
-    observed === 0 ||
-    (doubletons >= MIN_DOUBLETONS && unseen <= observed * MAX_UNSEEN_RATIO);
+  const reliable = observed === 0 || (doubletons >= MIN_DOUBLETONS && unseen <= observed * MAX_UNSEEN_RATIO);
 
   return {
     observed,
@@ -157,9 +148,7 @@ function confidenceInterval(
   }
 
   const ratio = singletons / doubletons;
-  const variance =
-    doubletons *
-    (Math.pow(ratio, 4) / 4 + Math.pow(ratio, 3) + Math.pow(ratio, 2) / 2);
+  const variance = doubletons * (Math.pow(ratio, 4) / 4 + Math.pow(ratio, 3) + Math.pow(ratio, 2) / 2);
 
   if (variance <= 0) return { lower: observed, upper: observed + unseen };
 
@@ -175,9 +164,11 @@ function confidenceInterval(
  *
  * @param captureCounts for each observed item, how many distinct sources caught it
  */
-export function frequenciesFromCaptures(
-  captureCounts: Iterable<number>,
-): { observed: number; singletons: number; doubletons: number } {
+export function frequenciesFromCaptures(captureCounts: Iterable<number>): {
+  observed: number;
+  singletons: number;
+  doubletons: number;
+} {
   let observed = 0;
   let singletons = 0;
   let doubletons = 0;

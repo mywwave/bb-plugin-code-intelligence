@@ -48,14 +48,14 @@ unreleased commits may track the repository's `main` branch instead.
 
 ## What the agent gets
 
-| Question shape | Native tool | Result |
-| --- | --- | --- |
-| Enough source already in the prompt | *(none)* | Answer; skip discovery. |
-| Known identifier, string, import, or regex (location only) | `instant_grep` | Exact file/line hits, glob filtering, context, and paging. |
-| “Where/how is this handled?” with no exact target | `codebase_query` | Read-equivalent one-shot: exact hits, snippets, edges, blast radius. |
-| Known identifier, direct caller/callee/delegation | `codebase_query` with `mode: "trace"` | Exact source context and direct static relations in one call. |
-| Known symbol/file, need deeper callers or tests (full surface) | `symbol_lookup`, `code_graph_context` | Definitions, static relationships, tests, and stated graph limits. |
-| Before or after an implementation edit | `prechange_impact`, `verify_change` | Direct impact and declared verification checks. |
+| Question shape                                                 | Native tool                           | Result                                                               |
+| -------------------------------------------------------------- | ------------------------------------- | -------------------------------------------------------------------- |
+| Enough source already in the prompt                            | _(none)_                              | Answer; skip discovery.                                              |
+| Known identifier, string, import, or regex (location only)     | `instant_grep`                        | Exact file/line hits, glob filtering, context, and paging.           |
+| “Where/how is this handled?” with no exact target              | `codebase_query`                      | Read-equivalent one-shot: exact hits, snippets, edges, blast radius. |
+| Known identifier, direct caller/callee/delegation              | `codebase_query` with `mode: "trace"` | Exact source context and direct static relations in one call.        |
+| Known symbol/file, need deeper callers or tests (full surface) | `symbol_lookup`, `code_graph_context` | Definitions, static relationships, tests, and stated graph limits.   |
+| Before or after an implementation edit                         | `prechange_impact`, `verify_change`   | Direct impact and declared verification checks.                      |
 
 Default agent surface is **lean** (`codebase_query`, `instant_grep`,
 `prechange_impact`, `verify_change`). Use `bb code-intelligence tool-surface full`
@@ -75,16 +75,16 @@ The structural graph is deliberately syntax-first: it records declarations,
 call sites, and syntactic imports, then resolves only local targets that were
 actually indexed. It supports:
 
-| Source language | Extensions | Grammar asset | Conservative resolution boundary |
-| --- | --- | --- | --- |
-| TypeScript / TSX | `.ts`, `.mts`, `.cts`, `.tsx` | TypeScript / TSX | Relative modules only. |
-| JavaScript | `.js`, `.mjs`, `.cjs`, `.jsx` | JavaScript | Relative modules only. |
-| Python | `.py`, `.pyi` | Python | Relative modules only. |
-| Go | `.go` | Go | Imports are recorded; module/package roots are not guessed. |
-| Rust | `.rs` | Rust | Explicit local `mod` paths may resolve to indexed `.rs` files; crate roots are not guessed. |
-| C | `.c`, `.h` | bundled C++ grammar | A C-family baseline; quoted relative headers may resolve to indexed files. |
-| C++ | `.cc`, `.cp`, `.cpp`, `.cxx`, `.hpp`, `.hh`, `.hxx` | C++ | Quoted relative headers may resolve to indexed files. |
-| Java | `.java` | Java | Imports are recorded; classpaths and packages are not guessed. |
+| Source language  | Extensions                                          | Grammar asset       | Conservative resolution boundary                                                            |
+| ---------------- | --------------------------------------------------- | ------------------- | ------------------------------------------------------------------------------------------- |
+| TypeScript / TSX | `.ts`, `.mts`, `.cts`, `.tsx`                       | TypeScript / TSX    | Relative modules only.                                                                      |
+| JavaScript       | `.js`, `.mjs`, `.cjs`, `.jsx`                       | JavaScript          | Relative modules only.                                                                      |
+| Python           | `.py`, `.pyi`                                       | Python              | Relative modules only.                                                                      |
+| Go               | `.go`                                               | Go                  | Imports are recorded; module/package roots are not guessed.                                 |
+| Rust             | `.rs`                                               | Rust                | Explicit local `mod` paths may resolve to indexed `.rs` files; crate roots are not guessed. |
+| C                | `.c`, `.h`                                          | bundled C++ grammar | A C-family baseline; quoted relative headers may resolve to indexed files.                  |
+| C++              | `.cc`, `.cp`, `.cpp`, `.cxx`, `.hpp`, `.hh`, `.hxx` | C++                 | Quoted relative headers may resolve to indexed files.                                       |
+| Java             | `.java`                                             | Java                | Imports are recorded; classpaths and packages are not guessed.                              |
 
 The published WASM package has no separate C grammar. C therefore explicitly
 uses its version-matched C++ grammar asset, validated against the C-family
@@ -93,11 +93,11 @@ that C preprocessor semantics or a compiler's type system are modelled.
 
 ## What changes for a developer
 
-| Without Code Intelligence | With Code Intelligence |
-| --- | --- |
-| The agent composes its own `rg`/`find`/file-reading commands and interprets raw output. | Known names and patterns have bounded exact search; vague questions have ranked entry points; callers, tests, impact, and verification have dedicated context tools. |
-| Useful code evidence exists only in the terminal transcript the agent happened to build. | Tool results carry explicit files/lines, paging, and conservative static-analysis limits, so the next step has a narrower, citable basis. |
-| Each agent and task must rediscover a search routine. | BB supplies one host-aware navigation path across the supported languages while retaining shell fallback for unusual cases. |
+| Without Code Intelligence                                                                | With Code Intelligence                                                                                                                                               |
+| ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The agent composes its own `rg`/`find`/file-reading commands and interprets raw output.  | Known names and patterns have bounded exact search; vague questions have ranked entry points; callers, tests, impact, and verification have dedicated context tools. |
+| Useful code evidence exists only in the terminal transcript the agent happened to build. | Tool results carry explicit files/lines, paging, and conservative static-analysis limits, so the next step has a narrower, citable basis.                            |
+| Each agent and task must rediscover a search routine.                                    | BB supplies one host-aware navigation path across the supported languages while retaining shell fallback for unusual cases.                                          |
 
 ## Evidence, not promises
 
@@ -108,13 +108,13 @@ arm. The provider/model, permission mode, BB version, fixture commit, and
 prompt were kept fixed. The enabled arm used the unpublished candidate revision
 documented in the report; it is not a claim about an already released package.
 
-| Measured result | Without plugin | With plugin | Change |
-| --- | ---: | ---: | ---: |
-| Correct final answers | `15 / 15` | `15 / 15` | preserved |
-| Native Code Intelligence calls | `0` | `27` | replaces shell discovery |
-| Shell discovery calls | `39` | `3` | **92.3% fewer** |
-| Total discovery operations | `39` | `30` | **23.1% fewer** |
-| Median observed full-turn event timeline | `18.0 s` | `27.1 s` | **50.7% higher** |
+| Measured result                          | Without plugin | With plugin |                   Change |
+| ---------------------------------------- | -------------: | ----------: | -----------------------: |
+| Correct final answers                    |      `15 / 15` |   `15 / 15` |                preserved |
+| Native Code Intelligence calls           |            `0` |        `27` | replaces shell discovery |
+| Shell discovery calls                    |           `39` |         `3` |          **92.3% fewer** |
+| Total discovery operations               |           `39` |        `30` |          **23.1% fewer** |
+| Median observed full-turn event timeline |       `18.0 s` |    `27.1 s` |         **50.7% higher** |
 
 So the demonstrated value is **structured native navigation without losing
 correctness**: on this fixed multi-hop task set, the enabled arm made 36 fewer

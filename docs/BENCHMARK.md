@@ -49,12 +49,12 @@ provider, model, reasoning level, fixture commits, and permission mode as the
 published [v4 diagnostic baseline](../bench/results/2026-07-31-agent-value-v4.md)
 (BB `0.34`, `gpt-5.6-sol`, reasoning `low`). Do not invent a parallel harness.
 
-| KPI | How to measure | Success bar (do not claim until measured) |
-| --- | --- | --- |
-| Correctness | Expected path + required final-answer terms | Preserved vs baseline |
-| Round-trips | Discovery ops; share of turns with ≤1 native discovery call | ≥40% of navigation turns ≤1 discovery |
-| Wall-clock | Median `item/started` → `item/completed` event timeline + runner elapsed | Not worse than baseline (~18 s median timeline; must-fix the prior +51% regression) |
-| No-redundant | New **context-already-present** arm (below) | ≥70% of those turns with 0 discovery calls |
+| KPI          | How to measure                                                           | Success bar (do not claim until measured)                                           |
+| ------------ | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
+| Correctness  | Expected path + required final-answer terms                              | Preserved vs baseline                                                               |
+| Round-trips  | Discovery ops; share of turns with ≤1 native discovery call              | ≥40% of navigation turns ≤1 discovery                                               |
+| Wall-clock   | Median `item/started` → `item/completed` event timeline + runner elapsed | Not worse than baseline (~18 s median timeline; must-fix the prior +51% regression) |
+| No-redundant | New **context-already-present** arm (below)                              | ≥70% of those turns with 0 discovery calls                                          |
 
 ### Arms
 

@@ -75,12 +75,18 @@ describe("instantGrep", () => {
 
   it("builds option-safe ripgrep arguments", () => {
     expect(buildInstantGrepArgs({ pattern: "PaymentFailedError", word: true })).toEqual([
-      "--json", "--line-number", "--no-heading", "--color", "never", "--fixed-strings", "--word-regexp",
-      "--", "PaymentFailedError", ".",
+      "--json",
+      "--line-number",
+      "--no-heading",
+      "--color",
+      "never",
+      "--fixed-strings",
+      "--word-regexp",
+      "--",
+      "PaymentFailedError",
+      ".",
     ]);
-    expect(() => buildInstantGrepArgs({ pattern: "x", glob: "--hidden" })).toThrow(
-      "glob must not begin with '-'",
-    );
+    expect(() => buildInstantGrepArgs({ pattern: "x", glob: "--hidden" })).toThrow("glob must not begin with '-'");
   });
 
   it("accepts enough bounded context for one complete declaration while rejecting larger pages", () => {
@@ -99,7 +105,12 @@ describe("instantGrep", () => {
 
   it("returns surrounding lines and a deterministic next offset for content pages", async () => {
     const root = await fixture({
-      "flow.ts": ["const before = 1;", "throw new PaymentFailedError();", "const after = 2;", "throw new PaymentFailedError();"].join("\n"),
+      "flow.ts": [
+        "const before = 1;",
+        "throw new PaymentFailedError();",
+        "const after = 2;",
+        "throw new PaymentFailedError();",
+      ].join("\n"),
     });
 
     const result = await instantGrep(root, {
@@ -169,13 +180,15 @@ describe("instantGrep", () => {
     });
 
     expect(result).toEqual({
-      matches: [{
-        file: "./src/payment.ts",
-        line: 2,
-        text: "throw new PaymentFailedError();",
-        before: [{ line: 1, text: "const before = 1;" }],
-        after: [{ line: 3, text: "const after = 2;" }],
-      }],
+      matches: [
+        {
+          file: "./src/payment.ts",
+          line: 2,
+          text: "throw new PaymentFailedError();",
+          before: [{ line: 1, text: "const before = 1;" }],
+          after: [{ line: 3, text: "const after = 2;" }],
+        },
+      ],
       truncated: false,
     });
   });
@@ -194,10 +207,7 @@ describe("instantGrep", () => {
       limit: 10,
     });
 
-    expect(result.matches.map((match) => match.file)).toEqual([
-      "./examples/Example.java",
-      "./src/main/java/App.java",
-    ]);
+    expect(result.matches.map((match) => match.file)).toEqual(["./examples/Example.java", "./src/main/java/App.java"]);
   });
 
   it("reuses a prepared remote snapshot without changing the exact-search contract", async () => {

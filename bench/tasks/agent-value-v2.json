@@ -87,10 +87,7 @@
     }
   ],
   "protocol": {
-    "arms": [
-      "baseline_without_plugin",
-      "plugin_enabled"
-    ],
+    "arms": ["baseline_without_plugin", "plugin_enabled"],
     "repetitionsPerTaskPerArm": 5,
     "threadRules": [
       "Use a fresh thread for every repetition.",

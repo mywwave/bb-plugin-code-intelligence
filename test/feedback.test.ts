@@ -1,11 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  deriveOutcome,
-  looksLikeSearch,
-  summarizeFeedback,
-  type PendingAnswer,
-} from "../src/feedback.js";
+import { deriveOutcome, looksLikeSearch, summarizeFeedback, type PendingAnswer } from "../src/feedback.js";
 
 function answer(overrides: Partial<PendingAnswer> = {}): PendingAnswer {
   return {
@@ -83,10 +78,7 @@ describe("deriveOutcome", () => {
 
   it("splits changed files into hits and labelled misses", () => {
     // The miss is the valuable half: a query paired with the right answer.
-    const outcome = deriveOutcome(answer(), [
-      change(11, "src/perm.ts"),
-      change(12, "src/elsewhere.ts"),
-    ]);
+    const outcome = deriveOutcome(answer(), [change(11, "src/perm.ts"), change(12, "src/elsewhere.ts")]);
 
     expect(outcome.hitFiles).toEqual(["src/perm.ts"]);
     expect(outcome.missedFiles).toEqual(["src/elsewhere.ts"]);
@@ -104,10 +96,7 @@ describe("deriveOutcome", () => {
   });
 
   it("counts a full hit as recall 1", () => {
-    const outcome = deriveOutcome(answer(), [
-      change(11, "src/perm.ts"),
-      change(12, "src/thread.ts"),
-    ]);
+    const outcome = deriveOutcome(answer(), [change(11, "src/perm.ts"), change(12, "src/thread.ts")]);
 
     expect(outcome.missedFiles).toEqual([]);
     expect(outcome.recall).toBe(1);
@@ -126,9 +115,7 @@ describe("deriveOutcome", () => {
 
   it("reads several paths from one multi-file edit", () => {
     // A single tool call can touch more than one file; all of them count.
-    const outcome = deriveOutcome(answer(), [
-      change(11, "src/perm.ts", "src/elsewhere.ts", "src/third.ts"),
-    ]);
+    const outcome = deriveOutcome(answer(), [change(11, "src/perm.ts", "src/elsewhere.ts", "src/third.ts")]);
 
     expect(outcome.changedFiles).toHaveLength(3);
     expect(outcome.hitFiles).toEqual(["src/perm.ts"]);
@@ -157,11 +144,13 @@ describe("deriveOutcome", () => {
 
 describe("summarizeFeedback", () => {
   it("keeps route-level search continuation and recall separate", () => {
-    expect(summarizeFeedback([
-      { surface: "instant_grep", searchesAfter: 2, recall: null },
-      { surface: "instant_grep", searchesAfter: 0, recall: 1 },
-      { surface: "codebase_query", searchesAfter: 1, recall: 0.5 },
-    ])).toEqual([
+    expect(
+      summarizeFeedback([
+        { surface: "instant_grep", searchesAfter: 2, recall: null },
+        { surface: "instant_grep", searchesAfter: 0, recall: 1 },
+        { surface: "codebase_query", searchesAfter: 1, recall: 0.5 },
+      ]),
+    ).toEqual([
       {
         surface: "codebase_query",
         answers: 1,
@@ -182,9 +171,7 @@ describe("summarizeFeedback", () => {
   });
 
   it("does not turn an unfinished thread into a zero-search outcome", () => {
-    expect(summarizeFeedback([
-      { surface: "code_graph_context", searchesAfter: null, recall: null },
-    ])).toEqual([
+    expect(summarizeFeedback([{ surface: "code_graph_context", searchesAfter: null, recall: null }])).toEqual([
       {
         surface: "code_graph_context",
         answers: 1,

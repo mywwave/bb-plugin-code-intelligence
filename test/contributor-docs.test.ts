@@ -43,19 +43,13 @@ describe("contributor contract", () => {
     await expect(readRepositoryFile("CONTRIBUTING.md")).resolves.not.toContain("release:publish");
     await expect(readRepositoryFile("README.md")).resolves.not.toContain("release:publish");
     await expect(access(resolve(root, "docs/RELEASE_CHECKLIST.md"))).rejects.toThrow();
-    await expect(readRepositoryFile("SECURITY.md")).resolves.toContain(
-      "Private Vulnerability Reporting",
-    );
+    await expect(readRepositoryFile("SECURITY.md")).resolves.toContain("Private Vulnerability Reporting");
   });
 
   it("publishes stable as the managed Git update channel", async () => {
     const readme = await readRepositoryFile("README.md");
-    expect(readme).toContain(
-      "git:https://github.com/mywwave/bb-plugin-code-intelligence.git@stable",
-    );
-    expect(readme).not.toContain(
-      "git:https://github.com/mywwave/bb-plugin-code-intelligence.git@main",
-    );
+    expect(readme).toContain("git:https://github.com/mywwave/bb-plugin-code-intelligence.git@stable");
+    expect(readme).not.toContain("git:https://github.com/mywwave/bb-plugin-code-intelligence.git@main");
     expect(readme).toContain("bb plugin update code-intelligence");
   });
 });

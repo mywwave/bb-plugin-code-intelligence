@@ -21,11 +21,7 @@ describe("extractFile", () => {
       ].join("\n"),
     );
 
-    expect(result.symbols.map((s) => `${s.kind}:${s.name}`)).toEqual([
-      "function:alpha",
-      "class:Svc",
-      "method:run",
-    ]);
+    expect(result.symbols.map((s) => `${s.kind}:${s.name}`)).toEqual(["function:alpha", "class:Svc", "method:run"]);
     const alpha = result.symbols[0]!;
     expect(alpha.startLine).toBe(0);
     expect(alpha.endLine).toBe(2);
@@ -33,10 +29,7 @@ describe("extractFile", () => {
   });
 
   it("attributes a call to its enclosing symbol", async () => {
-    const result = await ts(
-      "src/a.ts",
-      ["function outer() {", "  helper();", "}", "helper();"].join("\n"),
-    );
+    const result = await ts("src/a.ts", ["function outer() {", "  helper();", "}", "helper();"].join("\n"));
 
     const inside = result.calls.find((c) => c.line === 1);
     const topLevel = result.calls.find((c) => c.line === 3);
@@ -86,11 +79,7 @@ describe("extractFile", () => {
         "class Worker extends Base implements Reader { run() {} read() { return ''; } }",
       ].join("\n"),
     );
-    const python = await extractFile(
-      "pkg/types.py",
-      "python",
-      "class Child(Base):\n    pass\n",
-    );
+    const python = await extractFile("pkg/types.py", "python", "class Child(Base):\n    pass\n");
 
     expect(typescript.typeRelations).toEqual([
       { file: "src/types.ts", subtype: "Worker", supertype: "Base", kind: "extends" },
@@ -148,28 +137,41 @@ describe("extractFile", () => {
   });
 
   it("resolves hierarchy only when both declared types are unambiguous", async () => {
-    const files = [await ts(
-      "src/types.ts",
-      [
-        "interface Reader { read(): string; }",
-        "class Base { run() {} }",
-        "class Worker extends Base implements Reader { run() {} read() { return ''; } }",
-      ].join("\n"),
-    )];
+    const files = [
+      await ts(
+        "src/types.ts",
+        [
+          "interface Reader { read(): string; }",
+          "class Base { run() {} }",
+          "class Worker extends Base implements Reader { run() {} read() { return ''; } }",
+        ].join("\n"),
+      ),
+    ];
 
     const resolved = resolveProject(files);
-    expect(resolved.typeRelations).toEqual(expect.arrayContaining([
-      expect.objectContaining({ kind: "extends", subtype: expect.stringContaining("#Worker@"), supertype: expect.stringContaining("#Base@") }),
-      expect.objectContaining({ kind: "implements", subtype: expect.stringContaining("#Worker@"), supertype: expect.stringContaining("#Reader@") }),
-      expect.objectContaining({ kind: "overrides", subtype: expect.stringContaining("#Worker.run@"), supertype: expect.stringContaining("#Base.run@") }),
-    ]));
+    expect(resolved.typeRelations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "extends",
+          subtype: expect.stringContaining("#Worker@"),
+          supertype: expect.stringContaining("#Base@"),
+        }),
+        expect.objectContaining({
+          kind: "implements",
+          subtype: expect.stringContaining("#Worker@"),
+          supertype: expect.stringContaining("#Reader@"),
+        }),
+        expect.objectContaining({
+          kind: "overrides",
+          subtype: expect.stringContaining("#Worker.run@"),
+          supertype: expect.stringContaining("#Base.run@"),
+        }),
+      ]),
+    );
   });
 
   it("keeps the terminal name of qualified TypeScript and Python base types", async () => {
-    const typescript = await ts(
-      "src/types.ts",
-      "class Base {}\nclass Child extends ns.Base {}\n",
-    );
+    const typescript = await ts("src/types.ts", "class Base {}\nclass Child extends ns.Base {}\n");
     const python = await extractFile(
       "pkg/types.py",
       "python",
@@ -177,30 +179,35 @@ describe("extractFile", () => {
     );
 
     expect(typescript.typeRelations).toContainEqual({
-      file: "src/types.ts", subtype: "Child", supertype: "Base", kind: "extends",
+      file: "src/types.ts",
+      subtype: "Child",
+      supertype: "Base",
+      kind: "extends",
     });
     expect(python.typeRelations).toContainEqual({
-      file: "pkg/types.py", subtype: "Child", supertype: "Base", kind: "extends",
+      file: "pkg/types.py",
+      subtype: "Child",
+      supertype: "Base",
+      kind: "extends",
     });
   });
 
   it("derives Python override relations from methods declared in inherited classes", async () => {
-    const files = [await extractFile(
-      "pkg/types.py",
-      "python",
-      [
-        "class Base:",
-        "    def run(self): pass",
-        "class Child(Base):",
-        "    def run(self): pass",
-      ].join("\n"),
-    )];
+    const files = [
+      await extractFile(
+        "pkg/types.py",
+        "python",
+        ["class Base:", "    def run(self): pass", "class Child(Base):", "    def run(self): pass"].join("\n"),
+      ),
+    ];
 
-    expect(resolveProject(files).typeRelations).toContainEqual(expect.objectContaining({
-      kind: "overrides",
-      subtype: expect.stringContaining("#Child.run@"),
-      supertype: expect.stringContaining("#Base.run@"),
-    }));
+    expect(resolveProject(files).typeRelations).toContainEqual(
+      expect.objectContaining({
+        kind: "overrides",
+        subtype: expect.stringContaining("#Child.run@"),
+        supertype: expect.stringContaining("#Base.run@"),
+      }),
+    );
   });
 
   it("derives overrides from the resolved type identities rather than class names", async () => {
@@ -211,11 +218,13 @@ describe("extractFile", () => {
     ]);
 
     const relations = resolveProject(files).typeRelations;
-    expect(relations).toContainEqual(expect.objectContaining({
-      kind: "extends",
-      subtype: expect.stringContaining("a/child.ts#Child@"),
-      supertype: expect.stringContaining("a/base.ts#Base@"),
-    }));
+    expect(relations).toContainEqual(
+      expect.objectContaining({
+        kind: "extends",
+        subtype: expect.stringContaining("a/child.ts#Child@"),
+        supertype: expect.stringContaining("a/base.ts#Base@"),
+      }),
+    );
     expect(relations.filter((relation) => relation.kind === "overrides")).toEqual([]);
   });
 
@@ -236,10 +245,12 @@ describe("extractFile", () => {
       "method:Run:Service",
       "function:helper:null",
     ]);
-    expect(go.calls).toEqual(expect.arrayContaining([
-      expect.objectContaining({ name: "helper", receiver: null }),
-      expect.objectContaining({ name: "Log", receiver: "util" }),
-    ]));
+    expect(go.calls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "helper", receiver: null }),
+        expect.objectContaining({ name: "Log", receiver: "util" }),
+      ]),
+    );
     expect(go.imports).toContainEqual({
       file: "svc/service.go",
       source: "example.com/util",
@@ -263,30 +274,26 @@ describe("extractFile", () => {
       "function:helper:null",
     ]);
     expect(rust.calls).toContainEqual(expect.objectContaining({ name: "helper", receiver: null }));
-    expect(rust.imports).toEqual(expect.arrayContaining([
-      { file: "crate/lib.rs", source: "crate::util::helper", local: "helper" },
-      { file: "crate/lib.rs", source: "./local", local: "local" },
-    ]));
+    expect(rust.imports).toEqual(
+      expect.arrayContaining([
+        { file: "crate/lib.rs", source: "crate::util::helper", local: "helper" },
+        { file: "crate/lib.rs", source: "./local", local: "local" },
+      ]),
+    );
 
     const c = await extractFile(
       "native/main.c",
       "c",
       ['#include "util.h"', "int helper(void) { return 1; }", "int run(void) { return helper(); }"].join("\n"),
     );
-    expect(c.symbols.map((symbol) => `${symbol.kind}:${symbol.name}`)).toEqual([
-      "function:helper",
-      "function:run",
-    ]);
+    expect(c.symbols.map((symbol) => `${symbol.kind}:${symbol.name}`)).toEqual(["function:helper", "function:run"]);
     expect(c.calls).toContainEqual(expect.objectContaining({ name: "helper", receiver: null }));
     expect(c.imports).toContainEqual({ file: "native/main.c", source: "./util.h", local: "util" });
 
     const cpp = await extractFile(
       "native/service.cpp",
       "cpp",
-      [
-        "class Service { public: void run() { helper(); } };",
-        "void helper() {}",
-      ].join("\n"),
+      ["class Service { public: void run() { helper(); } };", "void helper() {}"].join("\n"),
     );
     expect(cpp.symbols.map((symbol) => `${symbol.kind}:${symbol.name}:${symbol.container}`)).toEqual([
       "class:Service:null",
@@ -298,13 +305,7 @@ describe("extractFile", () => {
     const java = await extractFile(
       "app/Service.java",
       "java",
-      [
-        "import app.Util;",
-        "class Service {",
-        "  Util util;",
-        "  void run() { util.help(); }",
-        "}",
-      ].join("\n"),
+      ["import app.Util;", "class Service {", "  Util util;", "  void run() { util.help(); }", "}"].join("\n"),
     );
     expect(java.symbols.map((symbol) => `${symbol.kind}:${symbol.name}:${symbol.container}`)).toEqual([
       "class:Service:null",
@@ -338,9 +339,7 @@ describe("extractFile", () => {
     // tree-sitter is error-tolerant; a broken region must not discard the file.
     const result = await ts(
       "src/a.ts",
-      ["function good() { return 1; }", "function broken( {{{", "function alsoGood() { good(); }"].join(
-        "\n",
-      ),
+      ["function good() { return 1; }", "function broken( {{{", "function alsoGood() { good(); }"].join("\n"),
     );
 
     const names = result.symbols.map((s) => s.name);

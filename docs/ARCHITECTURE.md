@@ -17,15 +17,15 @@ engine used so callers can distinguish host-file snapshots from local scans.
 
 ## Native tool contract
 
-| Tool | Responsibility |
-| --- | --- |
-| `instant_grep` | Exact literal or regex search with glob, context, count, and paging modes. |
-| `codebase_query` | Read-equivalent one-shot explore (snippets, edges, blast) and direct-relation trace. |
-| `repository_context` | Project orientation and declared verification candidates. |
-| `symbol_lookup` | Definitions, direct callers, and test references for known targets. |
-| `code_graph_context` | Structural context, callers, tests, and declared graph limits. |
-| `prechange_impact` | Impact evidence before an implementation edit. |
-| `verify_change` | Scoped verification evidence after an edit. |
+| Tool                 | Responsibility                                                                       |
+| -------------------- | ------------------------------------------------------------------------------------ |
+| `instant_grep`       | Exact literal or regex search with glob, context, count, and paging modes.           |
+| `codebase_query`     | Read-equivalent one-shot explore (snippets, edges, blast) and direct-relation trace. |
+| `repository_context` | Project orientation and declared verification candidates.                            |
+| `symbol_lookup`      | Definitions, direct callers, and test references for known targets.                  |
+| `code_graph_context` | Structural context, callers, tests, and declared graph limits.                       |
+| `prechange_impact`   | Impact evidence before an implementation edit.                                       |
+| `verify_change`      | Scoped verification evidence after an edit.                                          |
 
 Native tool names are technical API identifiers. The product name is always
 Code Intelligence.

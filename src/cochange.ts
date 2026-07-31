@@ -42,9 +42,7 @@ export const EMPTY_COCHANGE: CochangeIndex = {
  *
  * Pure and synchronous so tests do not need a git fixture.
  */
-export function buildCochangeFromCommits(
-  commits: readonly CochangeCommit[],
-): CochangeIndex {
+export function buildCochangeFromCommits(commits: readonly CochangeCommit[]): CochangeIndex {
   const accum = new Map<string, Map<string, number>>();
 
   let commitCount = 0;
@@ -77,10 +75,7 @@ export function buildCochangeFromCommits(
  * Multiple seeds accumulate: a file that moved with two seeds beats one that
  * moved with a single seed at the same per-pair strength.
  */
-export function cochangeScoresForSeeds(
-  index: CochangeIndex,
-  seedFiles: ReadonlySet<string>,
-): Map<string, number> {
+export function cochangeScoresForSeeds(index: CochangeIndex, seedFiles: ReadonlySet<string>): Map<string, number> {
   const scores = new Map<string, number>();
   for (const seed of seedFiles) {
     const neighbors = index.byFile.get(seed);
@@ -125,16 +120,7 @@ export async function loadCochangeIndex(root: string): Promise<CochangeIndex> {
   try {
     const { stdout } = await execFileAsync(
       "git",
-      [
-        "-C",
-        root,
-        "log",
-        "--name-only",
-        "--pretty=format:%H",
-        "--diff-filter=ACMR",
-        "--no-merges",
-        `-${MAX_COMMITS}`,
-      ],
+      ["-C", root, "log", "--name-only", "--pretty=format:%H", "--diff-filter=ACMR", "--no-merges", `-${MAX_COMMITS}`],
       {
         maxBuffer: 64 * 1024 * 1024,
         timeout: 60_000,

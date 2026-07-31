@@ -5,7 +5,8 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
-const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+const SEMVER =
+  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 
 async function run(root, command, args, options = {}) {
   return execFileAsync(command, args, { cwd: root, ...options });
@@ -30,7 +31,9 @@ export async function assertPublishable(version, root = process.cwd()) {
   if (packageJson.version !== version) {
     throw new Error(`release version ${version} does not match package.json ${packageJson.version}`);
   }
-  if ((await git(repositoryRoot, ["rev-parse", "HEAD"])) !== (await git(repositoryRoot, ["rev-parse", "origin/main"]))) {
+  if (
+    (await git(repositoryRoot, ["rev-parse", "HEAD"])) !== (await git(repositoryRoot, ["rev-parse", "origin/main"]))
+  ) {
     throw new Error("release HEAD must equal origin/main; push the release commit first");
   }
   const tag = `v${version}`;
@@ -49,8 +52,15 @@ export async function publishRelease(version, root = process.cwd(), options = {}
   const tag = `v${version}`;
   await runner(repositoryRoot, "git", ["tag", "-a", tag, "-m", `Release ${tag}`]);
   await runner(repositoryRoot, "git", ["push", "origin", tag], { stdio: "inherit" });
-  await runner(repositoryRoot, "gh", ["release", "create", tag, "--verify-tag", "--generate-notes", "--fail-on-no-commits"], { stdio: "inherit" });
-  await runner(repositoryRoot, "git", ["push", "origin", `refs/tags/${tag}^{}:refs/heads/stable`], { stdio: "inherit" });
+  await runner(
+    repositoryRoot,
+    "gh",
+    ["release", "create", tag, "--verify-tag", "--generate-notes", "--fail-on-no-commits"],
+    { stdio: "inherit" },
+  );
+  await runner(repositoryRoot, "git", ["push", "origin", `refs/tags/${tag}^{}:refs/heads/stable`], {
+    stdio: "inherit",
+  });
 }
 
 const invokedPath = process.argv[1] === undefined ? null : resolve(process.argv[1]);

@@ -32,9 +32,7 @@ function runBb(args) {
 function median(values) {
   const sorted = [...values].sort((left, right) => left - right);
   const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 0
-    ? (sorted[middle - 1] + sorted[middle]) / 2
-    : sorted[middle];
+  return sorted.length % 2 === 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle];
 }
 
 function finalAnswer(events) {
@@ -73,23 +71,16 @@ function collectMetrics(events, expected) {
     /\b(?:rg|grep|find|fd|sed|awk|git\s+grep)\b/.test(item.command ?? ""),
   ).length;
   const turnStarted = events.find((event) => event.type === "turn/started");
-  const turnCompleted = [...events]
-    .reverse()
-    .find((event) => event.type === "turn/completed");
+  const turnCompleted = [...events].reverse().find((event) => event.type === "turn/completed");
   const answer = finalAnswer(events) ?? "";
   const normalizedAnswer = answer.toLowerCase();
   const correct =
     normalizedAnswer.includes(expected.pathIncludes.toLowerCase()) &&
-    expected.requiredTerms.every((term) =>
-      normalizedAnswer.includes(term.toLowerCase()),
-    );
+    expected.requiredTerms.every((term) => normalizedAnswer.includes(term.toLowerCase()));
 
   return {
     correct,
-    wallTimeMs:
-      turnStarted && turnCompleted
-        ? turnCompleted.createdAt - turnStarted.createdAt
-        : null,
+    wallTimeMs: turnStarted && turnCompleted ? turnCompleted.createdAt - turnStarted.createdAt : null,
     completedDiscoveryOperations: nativePluginCalls + shellSearchCalls,
     nativePluginCalls,
     shellSearchCalls,
@@ -101,14 +92,8 @@ const project = argument("--project");
 const arm = argument("--arm");
 const out = argument("--out");
 const selectedTask = argument("--task");
-const contractPath = resolve(
-  argument("--contract") ?? "bench/tasks/agent-value-v2.json",
-);
-if (
-  !project ||
-  !out ||
-  !["baseline_without_plugin", "plugin_enabled"].includes(arm)
-) {
+const contractPath = resolve(argument("--contract") ?? "bench/tasks/agent-value-v2.json");
+if (!project || !out || !["baseline_without_plugin", "plugin_enabled"].includes(arm)) {
   usage();
   process.exitCode = 2;
 } else {
@@ -126,32 +111,18 @@ if (
     const taskById = new Map(contract.tasks.map((task) => [task.id, task]));
     runs = runs.map((run) => {
       if (run.arm !== arm || !taskById.has(run.taskId)) return run;
-      const events = JSON.parse(
-        runBb(["thread", "log", run.threadId, "--json", "--limit", "500"]),
-      );
+      const events = JSON.parse(runBb(["thread", "log", run.threadId, "--json", "--limit", "500"]));
       return { ...run, ...collectMetrics(events, taskById.get(run.taskId).expected) };
     });
-    await writeFile(
-      outputPath,
-      `${JSON.stringify({ suite: contract.suite, runs }, null, 2)}\n`,
-    );
+    await writeFile(outputPath, `${JSON.stringify({ suite: contract.suite, runs }, null, 2)}\n`);
   }
-  const tasks = selectedTask
-    ? contract.tasks.filter((task) => task.id === selectedTask)
-    : contract.tasks;
+  const tasks = selectedTask ? contract.tasks.filter((task) => task.id === selectedTask) : contract.tasks;
   if (tasks.length === 0) {
     throw new Error(`No task named ${selectedTask}`);
   }
   for (const task of tasks) {
     for (let repetition = 1; repetition <= contract.protocol.repetitionsPerTaskPerArm; repetition += 1) {
-      if (
-        runs.some(
-          (run) =>
-            run.taskId === task.id &&
-            run.arm === arm &&
-            run.repetition === repetition,
-        )
-      ) {
+      if (runs.some((run) => run.taskId === task.id && run.arm === arm && run.repetition === repetition)) {
         console.log(`${arm} ${task.id} r${repetition}: already recorded`);
         continue;
       }
@@ -185,9 +156,7 @@ if (
       } catch (error) {
         waitError = error.message;
       }
-      const events = JSON.parse(
-        runBb(["thread", "log", spawned.id, "--json", "--limit", "500"]),
-      );
+      const events = JSON.parse(runBb(["thread", "log", spawned.id, "--json", "--limit", "500"]));
       const metrics = collectMetrics(events, task.expected);
       const result = {
         taskId: task.id,
@@ -199,10 +168,7 @@ if (
         runnerElapsedMs: Date.now() - startedAt,
       };
       runs.push(result);
-      await writeFile(
-        outputPath,
-        `${JSON.stringify({ suite: contract.suite, runs }, null, 2)}\n`,
-      );
+      await writeFile(outputPath, `${JSON.stringify({ suite: contract.suite, runs }, null, 2)}\n`);
       console.log(
         `${arm} ${task.id} r${repetition}: ${result.correct ? "correct" : "incorrect"}, ${result.completedDiscoveryOperations} operations, ${result.runnerElapsedMs}ms`,
       );

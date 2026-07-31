@@ -53,33 +53,36 @@ const expected = {
 
 describe("collectAgentValueV4Metrics", () => {
   it("measures paired native, shell, and reasoning intervals within the completed turn", () => {
-    const metrics = collectAgentValueV4Metrics([
-      ...turn({ seq: 1 }),
-      ...lifecycle({
-        seq: 10,
-        startedAt: 100,
-        completedAt: 300,
-        item: { type: "toolCall", id: "native", function: { name: "instant_grep" } },
-      }),
-      ...lifecycle({
-        seq: 20,
-        startedAt: 400,
-        completedAt: 550,
-        item: { type: "commandExecution", id: "shell", command: "rg answer src" },
-      }),
-      ...lifecycle({
-        seq: 30,
-        startedAt: 600,
-        completedAt: 700,
-        item: { type: "reasoning", id: "reasoning" },
-      }),
-      ...lifecycle({
-        seq: 40,
-        startedAt: 800,
-        completedAt: 850,
-        item: { type: "agentMessage", id: "answer", text: "src/answer.ts: answer" },
-      }),
-    ], expected);
+    const metrics = collectAgentValueV4Metrics(
+      [
+        ...turn({ seq: 1 }),
+        ...lifecycle({
+          seq: 10,
+          startedAt: 100,
+          completedAt: 300,
+          item: { type: "toolCall", id: "native", function: { name: "instant_grep" } },
+        }),
+        ...lifecycle({
+          seq: 20,
+          startedAt: 400,
+          completedAt: 550,
+          item: { type: "commandExecution", id: "shell", command: "rg answer src" },
+        }),
+        ...lifecycle({
+          seq: 30,
+          startedAt: 600,
+          completedAt: 700,
+          item: { type: "reasoning", id: "reasoning" },
+        }),
+        ...lifecycle({
+          seq: 40,
+          startedAt: 800,
+          completedAt: 850,
+          item: { type: "agentMessage", id: "answer", text: "src/answer.ts: answer" },
+        }),
+      ],
+      expected,
+    );
 
     expect(metrics).toMatchObject({
       correct: true,
@@ -99,27 +102,30 @@ describe("collectAgentValueV4Metrics", () => {
   });
 
   it("merges overlapping classified intervals before calculating the residual", () => {
-    const metrics = collectAgentValueV4Metrics([
-      ...turn({ seq: 1 }),
-      ...lifecycle({
-        seq: 10,
-        startedAt: 100,
-        completedAt: 400,
-        item: { type: "toolCall", id: "native", function: { name: "codebase_query" } },
-      }),
-      ...lifecycle({
-        seq: 20,
-        startedAt: 300,
-        completedAt: 500,
-        item: { type: "commandExecution", id: "shell", command: "rg query src" },
-      }),
-      ...lifecycle({
-        seq: 30,
-        startedAt: 700,
-        completedAt: 800,
-        item: { type: "reasoning", id: "reasoning" },
-      }),
-    ], expected);
+    const metrics = collectAgentValueV4Metrics(
+      [
+        ...turn({ seq: 1 }),
+        ...lifecycle({
+          seq: 10,
+          startedAt: 100,
+          completedAt: 400,
+          item: { type: "toolCall", id: "native", function: { name: "codebase_query" } },
+        }),
+        ...lifecycle({
+          seq: 20,
+          startedAt: 300,
+          completedAt: 500,
+          item: { type: "commandExecution", id: "shell", command: "rg query src" },
+        }),
+        ...lifecycle({
+          seq: 30,
+          startedAt: 700,
+          completedAt: 800,
+          item: { type: "reasoning", id: "reasoning" },
+        }),
+      ],
+      expected,
+    );
 
     expect(metrics).toMatchObject({
       nativePluginTimelineMs: 300,
@@ -131,21 +137,24 @@ describe("collectAgentValueV4Metrics", () => {
   });
 
   it("marks collapsed shell lifecycle intervals as unobservable instead of using them in cross-channel residuals", () => {
-    const metrics = collectAgentValueV4Metrics([
-      ...turn({ seq: 1 }),
-      ...lifecycle({
-        seq: 10,
-        startedAt: 100,
-        completedAt: 100,
-        item: { type: "commandExecution", id: "shell", command: "rg answer src" },
-      }),
-      ...lifecycle({
-        seq: 20,
-        startedAt: 200,
-        completedAt: 300,
-        item: { type: "toolCall", id: "native", function: { name: "instant_grep" } },
-      }),
-    ], expected);
+    const metrics = collectAgentValueV4Metrics(
+      [
+        ...turn({ seq: 1 }),
+        ...lifecycle({
+          seq: 10,
+          startedAt: 100,
+          completedAt: 100,
+          item: { type: "commandExecution", id: "shell", command: "rg answer src" },
+        }),
+        ...lifecycle({
+          seq: 20,
+          startedAt: 200,
+          completedAt: 300,
+          item: { type: "toolCall", id: "native", function: { name: "instant_grep" } },
+        }),
+      ],
+      expected,
+    );
 
     expect(metrics).toMatchObject({
       timingStatus: "complete",
@@ -160,21 +169,24 @@ describe("collectAgentValueV4Metrics", () => {
   });
 
   it("does not classify unrelated tools or non-search shell commands", () => {
-    const metrics = collectAgentValueV4Metrics([
-      ...turn({ seq: 1 }),
-      ...lifecycle({
-        seq: 10,
-        startedAt: 100,
-        completedAt: 200,
-        item: { type: "toolCall", id: "other-tool", function: { name: "web_search" } },
-      }),
-      ...lifecycle({
-        seq: 20,
-        startedAt: 300,
-        completedAt: 400,
-        item: { type: "commandExecution", id: "other-command", command: "npm test" },
-      }),
-    ], expected);
+    const metrics = collectAgentValueV4Metrics(
+      [
+        ...turn({ seq: 1 }),
+        ...lifecycle({
+          seq: 10,
+          startedAt: 100,
+          completedAt: 200,
+          item: { type: "toolCall", id: "other-tool", function: { name: "web_search" } },
+        }),
+        ...lifecycle({
+          seq: 20,
+          startedAt: 300,
+          completedAt: 400,
+          item: { type: "commandExecution", id: "other-command", command: "npm test" },
+        }),
+      ],
+      expected,
+    );
 
     expect(metrics).toMatchObject({
       nativePluginCalls: 0,
@@ -186,24 +198,27 @@ describe("collectAgentValueV4Metrics", () => {
   });
 
   it("selects the latest completed turn and ignores lifecycle events from older turns", () => {
-    const metrics = collectAgentValueV4Metrics([
-      ...turn({ turnId: "older", startedAt: 0, completedAt: 100, seq: 1 }),
-      ...lifecycle({
-        turnId: "older",
-        seq: 10,
-        startedAt: 10,
-        completedAt: 90,
-        item: { type: "toolCall", id: "older-tool", function: { name: "instant_grep" } },
-      }),
-      ...turn({ turnId: "latest", startedAt: 200, completedAt: 500, seq: 200 }),
-      ...lifecycle({
-        turnId: "latest",
-        seq: 210,
-        startedAt: 250,
-        completedAt: 350,
-        item: { type: "commandExecution", id: "latest-shell", command: "rg answer src" },
-      }),
-    ], expected);
+    const metrics = collectAgentValueV4Metrics(
+      [
+        ...turn({ turnId: "older", startedAt: 0, completedAt: 100, seq: 1 }),
+        ...lifecycle({
+          turnId: "older",
+          seq: 10,
+          startedAt: 10,
+          completedAt: 90,
+          item: { type: "toolCall", id: "older-tool", function: { name: "instant_grep" } },
+        }),
+        ...turn({ turnId: "latest", startedAt: 200, completedAt: 500, seq: 200 }),
+        ...lifecycle({
+          turnId: "latest",
+          seq: 210,
+          startedAt: 250,
+          completedAt: 350,
+          item: { type: "commandExecution", id: "latest-shell", command: "rg answer src" },
+        }),
+      ],
+      expected,
+    );
 
     expect(metrics).toMatchObject({
       selectedTurnId: "latest",
@@ -215,27 +230,30 @@ describe("collectAgentValueV4Metrics", () => {
   });
 
   it("keeps counts inspectable but nulls every duration for malformed lifecycle timing", () => {
-    const metrics = collectAgentValueV4Metrics([
-      ...turn({ seq: 1 }),
-      event({
-        seq: 10,
-        createdAt: 300,
-        type: "item/started",
-        item: { type: "toolCall", id: "native", function: { name: "instant_grep" } },
-      }),
-      event({
-        seq: 11,
-        createdAt: 100,
-        type: "item/completed",
-        item: { type: "toolCall", id: "native", function: { name: "instant_grep" } },
-      }),
-      event({
-        seq: 20,
-        createdAt: 400,
-        type: "item/completed",
-        item: { type: "toolCall", id: "orphan", function: { name: "instant_grep" } },
-      }),
-    ], expected);
+    const metrics = collectAgentValueV4Metrics(
+      [
+        ...turn({ seq: 1 }),
+        event({
+          seq: 10,
+          createdAt: 300,
+          type: "item/started",
+          item: { type: "toolCall", id: "native", function: { name: "instant_grep" } },
+        }),
+        event({
+          seq: 11,
+          createdAt: 100,
+          type: "item/completed",
+          item: { type: "toolCall", id: "native", function: { name: "instant_grep" } },
+        }),
+        event({
+          seq: 20,
+          createdAt: 400,
+          type: "item/completed",
+          item: { type: "toolCall", id: "orphan", function: { name: "instant_grep" } },
+        }),
+      ],
+      expected,
+    );
 
     expect(metrics).toMatchObject({
       timingStatus: "invalid",
@@ -252,51 +270,54 @@ describe("collectAgentValueV4Metrics", () => {
   });
 
   it("rejects duplicate, mismatched, and unfinished lifecycle pairs without treating deltas as endpoints", () => {
-    const metrics = collectAgentValueV4Metrics([
-      ...turn({ seq: 1 }),
-      event({
-        seq: 10,
-        createdAt: 100,
-        type: "item/started",
-        item: { type: "toolCall", id: "duplicate", function: { name: "instant_grep" } },
-      }),
-      event({
-        seq: 11,
-        createdAt: 110,
-        type: "item/started",
-        item: { type: "toolCall", id: "duplicate", function: { name: "instant_grep" } },
-      }),
-      event({
-        seq: 12,
-        createdAt: 120,
-        type: "item/agentMessage/delta",
-        item: { type: "toolCall", id: "duplicate", function: { name: "instant_grep" } },
-      }),
-      event({
-        seq: 13,
-        createdAt: 140,
-        type: "item/completed",
-        item: { type: "toolCall", id: "duplicate", function: { name: "instant_grep" } },
-      }),
-      event({
-        seq: 20,
-        createdAt: 200,
-        type: "item/started",
-        item: { type: "toolCall", id: "mismatch", function: { name: "instant_grep" } },
-      }),
-      event({
-        seq: 21,
-        createdAt: 220,
-        type: "item/completed",
-        item: { type: "commandExecution", id: "mismatch", command: "rg answer src" },
-      }),
-      event({
-        seq: 30,
-        createdAt: 300,
-        type: "item/started",
-        item: { type: "reasoning", id: "unfinished" },
-      }),
-    ], expected);
+    const metrics = collectAgentValueV4Metrics(
+      [
+        ...turn({ seq: 1 }),
+        event({
+          seq: 10,
+          createdAt: 100,
+          type: "item/started",
+          item: { type: "toolCall", id: "duplicate", function: { name: "instant_grep" } },
+        }),
+        event({
+          seq: 11,
+          createdAt: 110,
+          type: "item/started",
+          item: { type: "toolCall", id: "duplicate", function: { name: "instant_grep" } },
+        }),
+        event({
+          seq: 12,
+          createdAt: 120,
+          type: "item/agentMessage/delta",
+          item: { type: "toolCall", id: "duplicate", function: { name: "instant_grep" } },
+        }),
+        event({
+          seq: 13,
+          createdAt: 140,
+          type: "item/completed",
+          item: { type: "toolCall", id: "duplicate", function: { name: "instant_grep" } },
+        }),
+        event({
+          seq: 20,
+          createdAt: 200,
+          type: "item/started",
+          item: { type: "toolCall", id: "mismatch", function: { name: "instant_grep" } },
+        }),
+        event({
+          seq: 21,
+          createdAt: 220,
+          type: "item/completed",
+          item: { type: "commandExecution", id: "mismatch", command: "rg answer src" },
+        }),
+        event({
+          seq: 30,
+          createdAt: 300,
+          type: "item/started",
+          item: { type: "reasoning", id: "unfinished" },
+        }),
+      ],
+      expected,
+    );
 
     expect(metrics).toMatchObject({
       timingStatus: "invalid",
@@ -308,9 +329,7 @@ describe("collectAgentValueV4Metrics", () => {
   });
 
   it("marks timing incomplete when no completed turn is available", () => {
-    const metrics = collectAgentValueV4Metrics([
-      event({ seq: 1, createdAt: 0, type: "turn/started" }),
-    ], expected);
+    const metrics = collectAgentValueV4Metrics([event({ seq: 1, createdAt: 0, type: "turn/started" })], expected);
 
     expect(metrics).toMatchObject({
       selectedTurnId: null,

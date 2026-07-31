@@ -30,10 +30,7 @@ export class IndexRegistry<TIndex> {
    */
   constructor(private readonly capacity = 8) {}
 
-  ensure(
-    root: string,
-    build: () => Promise<IndexBuildResult<TIndex>>,
-  ): Promise<IndexedRoot<TIndex>> {
+  ensure(root: string, build: () => Promise<IndexBuildResult<TIndex>>): Promise<IndexedRoot<TIndex>> {
     const existing = this.entries.get(root);
     if (existing !== undefined) {
       // Re-inserting moves the key to the end: Map preserves insertion order,
@@ -54,17 +51,11 @@ export class IndexRegistry<TIndex> {
     }
   }
 
-  refresh(
-    root: string,
-    build: () => Promise<IndexBuildResult<TIndex>>,
-  ): Promise<IndexedRoot<TIndex>> {
+  refresh(root: string, build: () => Promise<IndexBuildResult<TIndex>>): Promise<IndexedRoot<TIndex>> {
     return this.startBuild(root, build);
   }
 
-  private startBuild(
-    root: string,
-    build: () => Promise<IndexBuildResult<TIndex>>,
-  ): Promise<IndexedRoot<TIndex>> {
+  private startBuild(root: string, build: () => Promise<IndexBuildResult<TIndex>>): Promise<IndexedRoot<TIndex>> {
     const inFlight = this.pending.get(root);
     if (inFlight !== undefined) return inFlight;
 
@@ -101,9 +92,7 @@ export class IndexRegistry<TIndex> {
    * one is queried would be seeing a cache detail, not information.
    */
   list(): readonly IndexedRoot<TIndex>[] {
-    return [...this.entries.values()].sort((left, right) =>
-      left.root.localeCompare(right.root),
-    );
+    return [...this.entries.values()].sort((left, right) => left.root.localeCompare(right.root));
   }
 
   clear(): void {

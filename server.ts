@@ -117,17 +117,19 @@ const indexViewSchema = z.object({
   symbols: z.number().int(),
   indexedAtMs: z.number().int().nullable(),
   staleness: z.string().nullable(),
-  remoteInventory: z.object({
-    enumerated: z.number().int(),
-    indexed: z.number().int(),
-    truncated: z.boolean(),
-    skipped: z.object({
-      ignored: z.number().int(),
-      excluded: z.number().int(),
-      tooLarge: z.number().int(),
-      nonUtf8: z.number().int(),
-    }),
-  }).nullable(),
+  remoteInventory: z
+    .object({
+      enumerated: z.number().int(),
+      indexed: z.number().int(),
+      truncated: z.boolean(),
+      skipped: z.object({
+        ignored: z.number().int(),
+        excluded: z.number().int(),
+        tooLarge: z.number().int(),
+        nonUtf8: z.number().int(),
+      }),
+    })
+    .nullable(),
 });
 
 export const rpcContract = defineRpcContract({
@@ -165,10 +167,12 @@ export const rpcContract = defineRpcContract({
     output: z.object({ config: configSchema }),
   },
   reindex: {
-    input: z.object({
-      root: z.string().nullable(),
-      projectId: z.string().nullable(),
-    }).strict(),
+    input: z
+      .object({
+        root: z.string().nullable(),
+        projectId: z.string().nullable(),
+      })
+      .strict(),
     output: z.object({
       status: indexViewSchema,
     }),
@@ -176,19 +180,13 @@ export const rpcContract = defineRpcContract({
 });
 
 export default async function plugin(bb: BbPluginApi) {
-  let config = normalizeCodeGraphConfig(
-    await bb.storage.kv.get<unknown>(CONFIG_KEY),
-  );
+  let config = normalizeCodeGraphConfig(await bb.storage.kv.get<unknown>(CONFIG_KEY));
 
   const db = bb.storage.database();
   // Preserve the index of every shipped migration. `storage.migrate` uses the
   // statement position as its durable id, so new feedback schema statements
   // belong strictly after the existing persistence sequence.
-  bb.storage.migrate(db, [
-    ...MIGRATIONS,
-    ...PERSISTENCE_MIGRATIONS,
-    ...FEEDBACK_SURFACE_MIGRATIONS,
-  ]);
+  bb.storage.migrate(db, [...MIGRATIONS, ...PERSISTENCE_MIGRATIONS, ...FEEDBACK_SURFACE_MIGRATIONS]);
 
   const indexes = new IndexRegistry<RetrievalIndex>();
   const repositoryContexts = new Map<string, { indexedAtMs: number; context: RepositoryContext }>();
@@ -203,12 +201,15 @@ export default async function plugin(bb: BbPluginApi) {
   /** Roots currently being built, surfaced to the settings page. */
   const indexingRoots = new Set<string>();
   /** Environment-routed workspaces indexed through the BB host-file API. */
-  const remoteWorkspaces = new Map<string, {
-    readonly path: string;
-    readonly projectId: string;
-    readonly environmentId: string;
-    readonly hostId: string;
-  }>();
+  const remoteWorkspaces = new Map<
+    string,
+    {
+      readonly path: string;
+      readonly projectId: string;
+      readonly environmentId: string;
+      readonly hostId: string;
+    }
+  >();
   /** Last complete host-file snapshot for a remote workspace. */
   const remoteSources = new Map<string, ReadonlyMap<string, string>>();
   /** Sorted and line-split alongside each remote snapshot for the search hot path. */
@@ -231,17 +232,13 @@ export default async function plugin(bb: BbPluginApi) {
 
   const rootLabel = (root: string): string => remoteWorkspaces.get(root)?.path ?? root;
   const isRemoteRoot = (root: string): boolean => remoteWorkspaces.has(root);
-  const inventoryLimits = (root: string): readonly string[] =>
-    remoteInventoryBlindSpots(remoteInventories.get(root));
+  const inventoryLimits = (root: string): readonly string[] => remoteInventoryBlindSpots(remoteInventories.get(root));
   const inventoryLimitField = (root: string): Record<string, readonly string[]> => {
     const limits = inventoryLimits(root);
     return limits.length === 0 ? {} : { inventoryLimits: limits };
   };
 
-  async function readRemoteRepositoryState(
-    root: string,
-    signal?: AbortSignal,
-  ): Promise<RepositoryState> {
+  async function readRemoteRepositoryState(root: string, signal?: AbortSignal): Promise<RepositoryState> {
     const workspace = remoteWorkspaces.get(root);
     if (workspace === undefined) throw new Error(`remote workspace is unavailable: ${root}`);
     const listed = await bb.sdk.projects.paths({
@@ -266,16 +263,21 @@ export default async function plugin(bb: BbPluginApi) {
         // A missing or unreadable .gitignore leaves the permanent exclusions below.
       }
     }
-    const paths = listed.paths
-      .map((entry) => entry.path.replace(/^\.\//, ""))
+    const paths = listed.paths.map((entry) => entry.path.replace(/^\.\//, ""));
     const collection = await collectRemoteSources({
       paths,
       truncated: listed.truncated,
       isIgnored: (file) => ignored !== null && ignored.ignores(file),
-      isExcluded: (file) => file.split("/").some((part) =>
-        part.startsWith(".") ||
-        ["node_modules", "dist", "build", "out", "target", "vendor", "venv", "__pycache__", "coverage"].includes(part),
-      ),
+      isExcluded: (file) =>
+        file
+          .split("/")
+          .some(
+            (part) =>
+              part.startsWith(".") ||
+              ["node_modules", "dist", "build", "out", "target", "vendor", "venv", "__pycache__", "coverage"].includes(
+                part,
+              ),
+          ),
       throwIfAborted: () => throwIfAborted(signal),
       read: async (file) => {
         throwIfAborted(signal);
@@ -287,19 +289,14 @@ export default async function plugin(bb: BbPluginApi) {
         });
       },
     });
-    const fileHashes = new Map(
-      [...collection.sources].map(([file, source]) => [file, hashContent(source)]),
-    );
+    const fileHashes = new Map([...collection.sources].map(([file, source]) => [file, hashContent(source)]));
     remoteSources.set(root, collection.sources);
     preparedRemoteSources.set(root, prepareInstantGrepSources(collection.sources));
     remoteInventories.set(root, collection.inventory);
     return { sources: collection.sources, fileHashes, remoteInventory: collection.inventory };
   }
 
-  async function readRepositoryState(
-    root: string,
-    signal?: AbortSignal,
-  ): Promise<RepositoryState> {
+  async function readRepositoryState(root: string, signal?: AbortSignal): Promise<RepositoryState> {
     if (isRemoteRoot(root)) return readRemoteRepositoryState(root, signal);
     const inventory = await listRepositorySourceFiles({
       root,
@@ -317,11 +314,7 @@ export default async function plugin(bb: BbPluginApi) {
     return { sources, fileHashes };
   }
 
-  async function buildRootIndex(
-    root: string,
-    observed?: RepositoryState,
-    signal?: AbortSignal,
-  ) {
+  async function buildRootIndex(root: string, observed?: RepositoryState, signal?: AbortSignal) {
     if (!isRemoteRoot(root)) {
       const rootStat = await stat(root);
       if (!rootStat.isDirectory()) throw new Error(`not a directory: ${root}`);
@@ -412,17 +405,12 @@ export default async function plugin(bb: BbPluginApi) {
         };
         mode = "restored";
       } else {
-        changedFiles =
-          freshness.changed.length + freshness.added.length + freshness.removed.length;
+        changedFiles = freshness.changed.length + freshness.added.length + freshness.removed.length;
         bb.log.info(
           `incremental refresh ${rootLabel(root)}: ${freshness.changed.length} changed, ` +
             `${freshness.added.length} new, ${freshness.removed.length} deleted`,
         );
-        extractions = await mergeIncrementalExtractions(
-          stored.extractions,
-          freshness,
-          parseFileOrSkip,
-        );
+        extractions = await mergeIncrementalExtractions(stored.extractions, freshness, parseFileOrSkip);
         resolution = resolveProject(extractions);
         scan = {
           symbols: resolution.symbols,
@@ -435,105 +423,96 @@ export default async function plugin(bb: BbPluginApi) {
       }
     }
 
-      const bodyOf = (symbol: CodeSymbol): string => {
-        const lines = linesOf(symbol.file);
-        if (lines === undefined) return "";
-        return lines
-          .slice(symbol.startLine, Math.min(symbol.endLine + 1, symbol.startLine + BODY_LINE_LIMIT))
-          .join("\n");
-      };
+    const bodyOf = (symbol: CodeSymbol): string => {
+      const lines = linesOf(symbol.file);
+      if (lines === undefined) return "";
+      return lines.slice(symbol.startLine, Math.min(symbol.endLine + 1, symbol.startLine + BODY_LINE_LIMIT)).join("\n");
+    };
 
-      let completenessValue: number;
-      let completenessReliable: boolean;
-      if (mode === "restored" && stored !== null) {
-        completenessValue = stored.completeness;
-        completenessReliable = stored.completenessReliable;
-      } else {
-        const frequencies = frequenciesFromCaptures(resolution!.captureCounts);
-        const estimate = chao1(
-          frequencies.observed,
-          frequencies.singletons,
-          frequencies.doubletons,
-          // Ambiguous call sites are edges every strategy declined to propose:
-          // counted directly rather than extrapolated.
-          resolution!.stats.ambiguous,
-        );
-        completenessValue = estimate.completenessLowerBound;
-        completenessReliable = estimate.reliable;
-      }
-
-      /**
-       * An index built from nothing does not get to call itself complete.
-       *
-       * When every file failed to parse there are no edges, no singletons and
-       * no doubletons, and Chao1 dutifully reports 100% — of a sample of zero.
-       * On NodeBB that is exactly what came out: `0 symbols, completeness >=
-       * 100.0%`, printed with a straight face while 742 files had failed. For a
-       * project whose entire claim is honest reporting of what it does not
-       * know, that is the one output that must never happen.
-       */
-      const parsedFiles = extractions.length;
-      if (parsedFiles === 0 || unparseable > parsedFiles) {
-        completenessReliable = false;
-        bb.log.warn(
-          `${rootLabel(root)}: parsed ${parsedFiles} files, failed on ${unparseable} — ` +
-            `completeness not reported`,
-        );
-      }
-
-      // Co-change is rebuilt even when the AST snapshot is reused: git log is
-      // ~0.1 s for hundreds of commits, and history moves independently of the
-      // working tree hashes we use for parse freshness.
-      const cochange = config.useCochange && !isRemoteRoot(root)
-        ? await loadCochangeIndex(root)
-        : EMPTY_COCHANGE;
-      const index = buildIndex(scan, bodyOf, completenessValue, completenessReliable, {
-        cochange,
-      });
-
-      const snapshot: Snapshot = {
-        symbols: scan.symbols,
-        edges: scan.edges as never,
-        typeRelations: scan.typeRelations ?? [],
-        extractions,
-        fileHashes: state.fileHashes,
-        ambiguousCalls: scan.ambiguousCalls,
-        completeness: completenessValue,
-        completenessReliable,
-        builtAtMs: mode === "restored" && stored !== null ? stored.builtAtMs : Date.now(),
-      };
-      throwIfAborted(signal);
-      /**
-       * A failed scan is not written to disk.
-       *
-       * Persisting it makes the failure permanent: the snapshot matches the
-       * file hashes, so every later run restores the empty index instead of
-       * reparsing, and the repository stays broken until someone deletes the
-       * row by hand. That is precisely what happened here — NodeBB was stuck
-       * returning zero symbols long after the parser had been fixed.
-       */
-      const worthKeeping = parsedFiles > 0 && unparseable <= parsedFiles;
-      if (mode !== "restored" && worthKeeping) saveSnapshot(db, root, snapshot);
-      snapshots.set(root, snapshot);
-      staleness.set(root, null);
-
-      bb.log.info(
-        `${mode} ${scan.symbols.length} symbols, ${scan.edges.length} edges` +
-          (mode === "updated" ? ` from ${changedFiles} changed file(s)` : "") +
-          (cochange.commitCount > 0 ? `, ${cochange.commitCount} co-change commits` : "") +
-          ` in ${((Date.now() - started) / 1000).toFixed(1)}s, ` +
-          (completenessReliable
-            ? `completeness >= ${(completenessValue * 100).toFixed(1)}%`
-            : `completeness not estimable`),
+    let completenessValue: number;
+    let completenessReliable: boolean;
+    if (mode === "restored" && stored !== null) {
+      completenessValue = stored.completeness;
+      completenessReliable = stored.completenessReliable;
+    } else {
+      const frequencies = frequenciesFromCaptures(resolution!.captureCounts);
+      const estimate = chao1(
+        frequencies.observed,
+        frequencies.singletons,
+        frequencies.doubletons,
+        // Ambiguous call sites are edges every strategy declined to propose:
+        // counted directly rather than extrapolated.
+        resolution!.stats.ambiguous,
       );
-      return { index, edgeCount: scan.edges.length };
+      completenessValue = estimate.completenessLowerBound;
+      completenessReliable = estimate.reliable;
+    }
+
+    /**
+     * An index built from nothing does not get to call itself complete.
+     *
+     * When every file failed to parse there are no edges, no singletons and
+     * no doubletons, and Chao1 dutifully reports 100% — of a sample of zero.
+     * On NodeBB that is exactly what came out: `0 symbols, completeness >=
+     * 100.0%`, printed with a straight face while 742 files had failed. For a
+     * project whose entire claim is honest reporting of what it does not
+     * know, that is the one output that must never happen.
+     */
+    const parsedFiles = extractions.length;
+    if (parsedFiles === 0 || unparseable > parsedFiles) {
+      completenessReliable = false;
+      bb.log.warn(
+        `${rootLabel(root)}: parsed ${parsedFiles} files, failed on ${unparseable} — ` + `completeness not reported`,
+      );
+    }
+
+    // Co-change is rebuilt even when the AST snapshot is reused: git log is
+    // ~0.1 s for hundreds of commits, and history moves independently of the
+    // working tree hashes we use for parse freshness.
+    const cochange = config.useCochange && !isRemoteRoot(root) ? await loadCochangeIndex(root) : EMPTY_COCHANGE;
+    const index = buildIndex(scan, bodyOf, completenessValue, completenessReliable, {
+      cochange,
+    });
+
+    const snapshot: Snapshot = {
+      symbols: scan.symbols,
+      edges: scan.edges as never,
+      typeRelations: scan.typeRelations ?? [],
+      extractions,
+      fileHashes: state.fileHashes,
+      ambiguousCalls: scan.ambiguousCalls,
+      completeness: completenessValue,
+      completenessReliable,
+      builtAtMs: mode === "restored" && stored !== null ? stored.builtAtMs : Date.now(),
+    };
+    throwIfAborted(signal);
+    /**
+     * A failed scan is not written to disk.
+     *
+     * Persisting it makes the failure permanent: the snapshot matches the
+     * file hashes, so every later run restores the empty index instead of
+     * reparsing, and the repository stays broken until someone deletes the
+     * row by hand. That is precisely what happened here — NodeBB was stuck
+     * returning zero symbols long after the parser had been fixed.
+     */
+    const worthKeeping = parsedFiles > 0 && unparseable <= parsedFiles;
+    if (mode !== "restored" && worthKeeping) saveSnapshot(db, root, snapshot);
+    snapshots.set(root, snapshot);
+    staleness.set(root, null);
+
+    bb.log.info(
+      `${mode} ${scan.symbols.length} symbols, ${scan.edges.length} edges` +
+        (mode === "updated" ? ` from ${changedFiles} changed file(s)` : "") +
+        (cochange.commitCount > 0 ? `, ${cochange.commitCount} co-change commits` : "") +
+        ` in ${((Date.now() - started) / 1000).toFixed(1)}s, ` +
+        (completenessReliable
+          ? `completeness >= ${(completenessValue * 100).toFixed(1)}%`
+          : `completeness not estimable`),
+    );
+    return { index, edgeCount: scan.edges.length };
   }
 
-  async function rebuildIndex(
-    root: string,
-    observed?: RepositoryState,
-    signal?: AbortSignal,
-  ) {
+  async function rebuildIndex(root: string, observed?: RepositoryState, signal?: AbortSignal) {
     indexingRoots.add(root);
     bb.realtime.publish("index-status", { root, indexing: true });
     try {
@@ -544,10 +523,7 @@ export default async function plugin(bb: BbPluginApi) {
     }
   }
 
-  async function ensureIndex(
-    inputRoot: string,
-    signal?: AbortSignal,
-  ): Promise<IndexedRoot<RetrievalIndex>> {
+  async function ensureIndex(inputRoot: string, signal?: AbortSignal): Promise<IndexedRoot<RetrievalIndex>> {
     const root = isRemoteRoot(inputRoot) ? inputRoot : resolvePath(inputRoot);
     // Do not bind a caller's AbortSignal into the coalesced build. Concurrent
     // ensure() waiters share one promise; if the first caller's signal aborts,
@@ -570,10 +546,10 @@ export default async function plugin(bb: BbPluginApi) {
       indexedAtMs: ready.indexedAtMs,
       context: isRemoteRoot(ready.root)
         ? buildRepositoryContextFromSources(
-          rootLabel(ready.root),
-          ready.index,
-          remoteSources.get(ready.root) ?? new Map(),
-        )
+            rootLabel(ready.root),
+            ready.index,
+            remoteSources.get(ready.root) ?? new Map(),
+          )
         : await buildRepositoryContext(ready.root, ready.index),
     });
   }
@@ -621,9 +597,7 @@ export default async function plugin(bb: BbPluginApi) {
     const roots: string[] = [];
     try {
       const projects = (await bb.sdk.projects.list()) as unknown;
-      const list = Array.isArray(projects)
-        ? projects
-        : ((projects as { projects?: unknown[] }).projects ?? []);
+      const list = Array.isArray(projects) ? projects : ((projects as { projects?: unknown[] }).projects ?? []);
       for (const project of list) {
         const path = readProjectPath(project as never);
         if (path !== null) roots.push(resolvePath(path));
@@ -634,21 +608,21 @@ export default async function plugin(bb: BbPluginApi) {
     return [...new Set(roots)];
   }
 
-  async function searchExact(
-    root: string,
-    options: readonly InstantGrepOptions[],
-  ) {
+  async function searchExact(root: string, options: readonly InstantGrepOptions[]) {
     if (!isRemoteRoot(root)) return instantGrepBatch(root, options);
     // A remote snapshot is acquired by ensureIndex before this is called.
     // Keeping the fallback explicit gives an actionable failure rather than
     // accidentally running ripgrep against the BB server's similarly named path.
     const sources = remoteSources.get(root);
     const prepared = preparedRemoteSources.get(root);
-    if (sources === undefined || prepared === undefined) throw new Error(`remote workspace is not indexed: ${rootLabel(root)}`);
-    return Promise.all(options.map(async (option) => ({
-      pattern: option.pattern,
-      ...(await instantGrepPreparedSources(prepared, option)),
-    })));
+    if (sources === undefined || prepared === undefined)
+      throw new Error(`remote workspace is not indexed: ${rootLabel(root)}`);
+    return Promise.all(
+      options.map(async (option) => ({
+        pattern: option.pattern,
+        ...(await instantGrepPreparedSources(prepared, option)),
+      })),
+    );
   }
 
   /**
@@ -662,22 +636,24 @@ export default async function plugin(bb: BbPluginApi) {
   ): Promise<void> {
     const sequenceAtAnswer = await currentSequence(bb, input.threadId);
     const answeredAtMs = Date.now();
-    const result = db.prepare(
-      `INSERT INTO answers (thread_id, surface, query, seeds, budget_tokens, returned_files,
+    const result = db
+      .prepare(
+        `INSERT INTO answers (thread_id, surface, query, seeds, budget_tokens, returned_files,
          returned_symbols, tokens_used, answered_at_ms, sequence_at_answer)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(
-      input.threadId,
-      input.surface,
-      input.query,
-      JSON.stringify(input.seeds),
-      input.budgetTokens,
-      JSON.stringify(input.returnedFiles),
-      JSON.stringify(input.returnedSymbols),
-      input.tokensUsed,
-      answeredAtMs,
-      sequenceAtAnswer,
-    );
+      )
+      .run(
+        input.threadId,
+        input.surface,
+        input.query,
+        JSON.stringify(input.seeds),
+        input.budgetTokens,
+        JSON.stringify(input.returnedFiles),
+        JSON.stringify(input.returnedSymbols),
+        input.tokensUsed,
+        answeredAtMs,
+        sequenceAtAnswer,
+      );
     const answer: PendingAnswer = {
       ...input,
       answerId: Number(result.lastInsertRowid),
@@ -688,12 +664,14 @@ export default async function plugin(bb: BbPluginApi) {
   }
 
   function feedbackBySurface() {
-    const rows = db.prepare(
-      `SELECT a.surface AS surface, o.searches_after AS searchesAfter, o.recall AS recall
+    const rows = db
+      .prepare(
+        `SELECT a.surface AS surface, o.searches_after AS searchesAfter, o.recall AS recall
        FROM answers a
        LEFT JOIN outcomes o ON o.answer_id = a.id
        ORDER BY a.id ASC`,
-    ).all() as Array<{ surface: FeedbackSurface; searchesAfter: number | null; recall: number | null }>;
+      )
+      .all() as Array<{ surface: FeedbackSurface; searchesAfter: number | null; recall: number | null }>;
     return summarizeFeedback(rows);
   }
 
@@ -703,11 +681,12 @@ export default async function plugin(bb: BbPluginApi) {
     return [
       "feedback by surface:",
       "surface\tanswers\toutcomes\tavg shell searches after\tavg recall (samples)",
-      ...rows.map((row) =>
-        `${row.surface}\t${row.answers}\t${row.outcomes}\t` +
-        (row.averageSearchesAfter === null ? "n/a" : row.averageSearchesAfter.toFixed(2)) +
-        "\t" +
-        (row.averageRecall === null ? `n/a (0)` : `${row.averageRecall.toFixed(3)} (${row.recallSamples})`),
+      ...rows.map(
+        (row) =>
+          `${row.surface}\t${row.answers}\t${row.outcomes}\t` +
+          (row.averageSearchesAfter === null ? "n/a" : row.averageSearchesAfter.toFixed(2)) +
+          "\t" +
+          (row.averageRecall === null ? `n/a (0)` : `${row.averageRecall.toFixed(3)} (${row.recallSamples})`),
       ),
       "",
     ].join("\n");
@@ -759,52 +738,115 @@ export default async function plugin(bb: BbPluginApi) {
       "large searches. Omit `root` unless the user explicitly supplies another workspace. " +
       "Use `patterns` to batch independent queries. For a pure location answer, cite a content hit " +
       "and stop. It stops at `limit`; refine pattern/glob or use nextOffset before reading files.",
-    parameters: z.object({
-      pattern: z.string().min(1).max(1_000).optional().describe("One literal text pattern by default, or a regex when regex is true."),
-      patterns: z.array(z.string().min(1).max(1_000)).min(1).max(10).optional().describe("Independent patterns with the same search options; use instead of pattern to save tool calls."),
-      regex: z.boolean().default(false).describe("Interpret pattern as a ripgrep regex instead of literal text."),
-      caseSensitive: z.boolean().default(true).describe("Match case exactly. Set false only for an intentional case-insensitive search."),
-      word: z.boolean().default(false).describe("Require word boundaries around the match."),
-      glob: z.string().min(1).max(300).optional().describe("Optional ripgrep glob, for example `*.ts` or `src/**`."),
-      limit: z.number().int().min(1).max(500).default(30).describe("Maximum matching lines returned."),
-      offset: z.number().int().min(0).max(100_000).default(0).describe("Content-match offset for the next page."),
-      outputMode: z.enum(["content", "files_with_matches", "count"]).default("content").describe("Return matching lines, matching files, or per-file counts."),
-      beforeContext: z.number().int().min(0).max(MAX_CONTEXT_LINES).default(0).describe("Source lines before every content match (at most 32)."),
-      afterContext: z.number().int().min(0).max(MAX_CONTEXT_LINES).default(0).describe("Source lines after every content match (at most 32)."),
-      root: z.string().optional().describe("Explicit server-local root. Omit to use the current thread workspace, including a remote environment."),
-    }).refine(({ pattern, patterns }) => (pattern === undefined) !== (patterns === undefined), {
-      message: "Pass exactly one of pattern or patterns.",
-    }),
-    async execute({ pattern, patterns, regex, caseSensitive, word, glob, limit, offset, outputMode, beforeContext, afterContext, root: requestedRoot }, { threadId, projectId, signal }) {
+    parameters: z
+      .object({
+        pattern: z
+          .string()
+          .min(1)
+          .max(1_000)
+          .optional()
+          .describe("One literal text pattern by default, or a regex when regex is true."),
+        patterns: z
+          .array(z.string().min(1).max(1_000))
+          .min(1)
+          .max(10)
+          .optional()
+          .describe("Independent patterns with the same search options; use instead of pattern to save tool calls."),
+        regex: z.boolean().default(false).describe("Interpret pattern as a ripgrep regex instead of literal text."),
+        caseSensitive: z
+          .boolean()
+          .default(true)
+          .describe("Match case exactly. Set false only for an intentional case-insensitive search."),
+        word: z.boolean().default(false).describe("Require word boundaries around the match."),
+        glob: z.string().min(1).max(300).optional().describe("Optional ripgrep glob, for example `*.ts` or `src/**`."),
+        limit: z.number().int().min(1).max(500).default(30).describe("Maximum matching lines returned."),
+        offset: z.number().int().min(0).max(100_000).default(0).describe("Content-match offset for the next page."),
+        outputMode: z
+          .enum(["content", "files_with_matches", "count"])
+          .default("content")
+          .describe("Return matching lines, matching files, or per-file counts."),
+        beforeContext: z
+          .number()
+          .int()
+          .min(0)
+          .max(MAX_CONTEXT_LINES)
+          .default(0)
+          .describe("Source lines before every content match (at most 32)."),
+        afterContext: z
+          .number()
+          .int()
+          .min(0)
+          .max(MAX_CONTEXT_LINES)
+          .default(0)
+          .describe("Source lines after every content match (at most 32)."),
+        root: z
+          .string()
+          .optional()
+          .describe(
+            "Explicit server-local root. Omit to use the current thread workspace, including a remote environment.",
+          ),
+      })
+      .refine(({ pattern, patterns }) => (pattern === undefined) !== (patterns === undefined), {
+        message: "Pass exactly one of pattern or patterns.",
+      }),
+    async execute(
+      {
+        pattern,
+        patterns,
+        regex,
+        caseSensitive,
+        word,
+        glob,
+        limit,
+        offset,
+        outputMode,
+        beforeContext,
+        afterContext,
+        root: requestedRoot,
+      },
+      { threadId, projectId, signal },
+    ) {
       const root = await resolveRoot(projectId ?? null, requestedRoot ?? null, threadId, signal);
       if (root === null) {
         return {
-          content: [{ type: "text" as const, text: "No BB project repository is available. Open a project or pass `root` explicitly." }],
+          content: [
+            {
+              type: "text" as const,
+              text: "No BB project repository is available. Open a project or pass `root` explicitly.",
+            },
+          ],
           isError: true,
         };
       }
       try {
         const searchPatterns = patterns ?? [pattern!];
         if (isRemoteRoot(root)) await ensureIndex(root, signal);
-        const results = await searchExact(root, searchPatterns.map((searchPattern) => ({
-          pattern: searchPattern,
-          regex,
-          caseSensitive,
-          word,
-          glob,
-          limit,
-          offset,
-          outputMode,
-          beforeContext,
-          afterContext,
-          signal,
-        })));
+        const results = await searchExact(
+          root,
+          searchPatterns.map((searchPattern) => ({
+            pattern: searchPattern,
+            regex,
+            caseSensitive,
+            word,
+            glob,
+            limit,
+            offset,
+            outputMode,
+            beforeContext,
+            afterContext,
+            signal,
+          })),
+        );
         if (typeof threadId === "string") {
-          const returnedFiles = [...new Set(results.flatMap((result) => [
-            ...result.matches.map((match) => match.file),
-            ...(result.files ?? []),
-            ...(result.counts ?? []).map((count) => count.file),
-          ]))];
+          const returnedFiles = [
+            ...new Set(
+              results.flatMap((result) => [
+                ...result.matches.map((match) => match.file),
+                ...(result.files ?? []),
+                ...(result.counts ?? []).map((count) => count.file),
+              ]),
+            ),
+          ];
           await recordFeedbackAnswer({
             threadId,
             surface: "instant_grep",
@@ -816,15 +858,31 @@ export default async function plugin(bb: BbPluginApi) {
             tokensUsed: 0,
           });
         }
-        const next = (result: typeof results[number]) => result.truncated
-          ? "Refine pattern/glob or call again with nextOffset before treating this search as exhaustive."
-          : outputMode === "content"
-            ? "For a pure location/existence answer, cite this exact hit and stop. Do not open the file or chain structural tools unless you need lines beyond this hit."
-            : "Use content mode on a selected file only when you need source lines.";
+        const next = (result: (typeof results)[number]) =>
+          result.truncated
+            ? "Refine pattern/glob or call again with nextOffset before treating this search as exhaustive."
+            : outputMode === "content"
+              ? "For a pure location/existence answer, cite this exact hit and stop. Do not open the file or chain structural tools unless you need lines beyond this hit."
+              : "Use content mode on a selected file only when you need source lines.";
         return JSON.stringify(
           searchPatterns.length === 1
-            ? { engine: isRemoteRoot(root) ? "BB host-file snapshot" : "ripgrep", root: rootLabel(root), mode: regex ? "regex" : "literal", outputMode, ...results[0], ...inventoryLimitField(root), next: next(results[0]!) }
-            : { engine: isRemoteRoot(root) ? "BB host-file snapshot" : "ripgrep", root: rootLabel(root), outputMode, results, ...inventoryLimitField(root), next: "Each result is independent; answer from exact hits or narrow only the query that needs it." },
+            ? {
+                engine: isRemoteRoot(root) ? "BB host-file snapshot" : "ripgrep",
+                root: rootLabel(root),
+                mode: regex ? "regex" : "literal",
+                outputMode,
+                ...results[0],
+                ...inventoryLimitField(root),
+                next: next(results[0]!),
+              }
+            : {
+                engine: isRemoteRoot(root) ? "BB host-file snapshot" : "ripgrep",
+                root: rootLabel(root),
+                outputMode,
+                results,
+                ...inventoryLimitField(root),
+                next: "Each result is independent; answer from exact hits or narrow only the query that needs it.",
+              },
           null,
           2,
         );
@@ -852,17 +910,48 @@ export default async function plugin(bb: BbPluginApi) {
       "symbol_lookup, or code_graph_context unless you need lines beyond the snippets. For a pure " +
       "location or literal question with no structural need, use instant_grep instead.",
     parameters: z.object({
-      query: z.string().min(3).max(1_000).describe("Natural-language question about the codebase. Include an identifier in backticks when you know one."),
-      explanation: z.string().min(8).max(300).describe("Why this bounded exploration or direct-relation trace fits the question."),
-      mode: z.enum(["explore", "trace"]).optional().describe("Use trace only for a known identifier's direct caller, callee, or delegation; otherwise omit for exploratory ranking."),
-      budgetTokens: z.number().int().min(256).max(32_000).optional().describe("Graph-context budget. Omit to use the plugin setting."),
-      root: z.string().optional().describe("Explicit server-local root. Omit to use the current thread workspace, including a remote environment."),
+      query: z
+        .string()
+        .min(3)
+        .max(1_000)
+        .describe(
+          "Natural-language question about the codebase. Include an identifier in backticks when you know one.",
+        ),
+      explanation: z
+        .string()
+        .min(8)
+        .max(300)
+        .describe("Why this bounded exploration or direct-relation trace fits the question."),
+      mode: z
+        .enum(["explore", "trace"])
+        .optional()
+        .describe(
+          "Use trace only for a known identifier's direct caller, callee, or delegation; otherwise omit for exploratory ranking.",
+        ),
+      budgetTokens: z
+        .number()
+        .int()
+        .min(256)
+        .max(32_000)
+        .optional()
+        .describe("Graph-context budget. Omit to use the plugin setting."),
+      root: z
+        .string()
+        .optional()
+        .describe(
+          "Explicit server-local root. Omit to use the current thread workspace, including a remote environment.",
+        ),
     }),
     async execute({ query, explanation, mode, budgetTokens, root: requestedRoot }, { threadId, projectId, signal }) {
       const root = await resolveRoot(projectId ?? null, requestedRoot ?? null, threadId, signal);
       if (root === null) {
         return {
-          content: [{ type: "text" as const, text: "No BB project repository is available. Open a project or pass `root` explicitly." }],
+          content: [
+            {
+              type: "text" as const,
+              text: "No BB project repository is available. Open a project or pass `root` explicitly.",
+            },
+          ],
           isError: true,
         };
       }
@@ -880,11 +969,12 @@ export default async function plugin(bb: BbPluginApi) {
         });
         const context = result.context;
         const trace = result.trace;
-        const exploreSymbols = context === undefined
-          ? undefined
-          : config.includeSnippets
-            ? await attachSnippets(ready.root, context.symbols, BODY_LINE_LIMIT, remoteSources.get(ready.root))
-            : context.symbols;
+        const exploreSymbols =
+          context === undefined
+            ? undefined
+            : config.includeSnippets
+              ? await attachSnippets(ready.root, context.symbols, BODY_LINE_LIMIT, remoteSources.get(ready.root))
+              : context.symbols;
         if (typeof threadId === "string") {
           await recordFeedbackAnswer({
             threadId,
@@ -892,76 +982,86 @@ export default async function plugin(bb: BbPluginApi) {
             query,
             seeds: result.patterns,
             budgetTokens: effectiveBudget,
-            returnedFiles: [...new Set([
-              ...result.exactMatches.map((match) => match.file),
-              ...(context?.files ?? []),
-              ...(trace?.symbols.map((symbol) => symbol.file) ?? []),
-            ])],
-            returnedSymbols: context?.symbols.map((symbol) => symbol.id) ?? trace?.symbols.map((symbol) => symbol.id) ?? [],
+            returnedFiles: [
+              ...new Set([
+                ...result.exactMatches.map((match) => match.file),
+                ...(context?.files ?? []),
+                ...(trace?.symbols.map((symbol) => symbol.file) ?? []),
+              ]),
+            ],
+            returnedSymbols:
+              context?.symbols.map((symbol) => symbol.id) ?? trace?.symbols.map((symbol) => symbol.id) ?? [],
             tokensUsed: context?.tokensUsed ?? 0,
           });
         }
-        return JSON.stringify({
-          engine: isRemoteRoot(ready.root) ? "BB host-file snapshot + graph index" : "ripgrep + local graph index",
-          root: rootLabel(ready.root),
-          query: result.query,
-          intent: explanation,
-          mode: result.mode,
-          patterns: result.patterns,
-          exactHits: result.exactMatches.slice(0, 12),
-          ...(exploreSymbols === undefined ? {} : {
-            symbols: exploreSymbols.slice(0, 12).map((symbol) => ({
-              id: symbol.id,
-              file: symbol.file,
-              lines: [symbol.startLine + 1, symbol.endLine + 1],
-              tokens: symbol.tokens,
-              via: symbol.via,
-              ...(config.includeSnippets ? { snippet: symbol.snippet ?? "" } : {}),
-            })),
-            tokensUsed: context!.tokensUsed,
-            budgetTokens: effectiveBudget,
-            dynamicBoundaries: boundariesIn(exploreSymbols).map((boundary) => ({
-              at: `${boundary.file}:${boundary.line}`,
-              form: boundary.form,
-              ...(boundary.key === undefined ? {} : { key: boundary.key }),
-            })),
-            edges: context!.edges.map((edge) => ({
-              from: edge.from,
-              to: edge.to,
-              via: edge.via,
-            })),
-            blastRadius: context!.blastRadius.map((entry) => ({
-              symbol: entry.id,
-              at: `${entry.file}:${entry.startLine + 1}`,
-              callers: entry.callers,
-              callerFiles: entry.callerFiles,
-              ...(entry.testFiles.length > 0
-                ? { tests: entry.testFiles }
-                : { tests: [], warning: "no covering tests found" }),
-            })),
-            graphFiles: context!.files.slice(0, 12),
-          }),
-          ...(trace === undefined ? {} : { trace: trace.symbols }),
-          graphCompleteness: ready.index.graphCompletenessReliable
-            ? `>= ${(ready.index.graphCompleteness * 100).toFixed(0)}%`
-            : "not estimable — too few edges were found by more than one strategy",
-          ...inventoryLimitField(ready.root),
-          timingMs: { index: indexMs, ...result.timingMs },
-          ...(result.mode === "explore" && config.includeSnippets
-            ? {
-                note:
-                  "Snippets are truncated bodies — treat them as already Read. Open a file only when you need lines beyond them. " +
-                  "graphCompleteness is a lower bound; reflection and dynamic dispatch are invisible to static analysis.",
-              }
-            : {}),
-          next: result.mode === "trace"
-            ? trace?.symbols.length === 0
-              ? "No indexed definition enclosed an exact hit. Refine the identifier or use instant_grep; an empty trace is not proof of no relation."
-              : "The exact definition and direct relation above answer this trace. Answer now; do not call instant_grep or code_graph_context unless the user asks for source beyond this result or a wider structure."
-            : exploreSymbols === undefined || exploreSymbols.length === 0
-              ? "No ranked symbols for this query. Answer from exactHits if present, or refine the question; do not start a multi-tool search loop."
-              : "Exact hits plus Read-equivalent snippets, edges, and blast radius above answer this exploration. Answer now; do not call instant_grep, symbol_lookup, or code_graph_context unless you need lines beyond the snippets or a wider structure.",
-        }, null, 2);
+        return JSON.stringify(
+          {
+            engine: isRemoteRoot(ready.root) ? "BB host-file snapshot + graph index" : "ripgrep + local graph index",
+            root: rootLabel(ready.root),
+            query: result.query,
+            intent: explanation,
+            mode: result.mode,
+            patterns: result.patterns,
+            exactHits: result.exactMatches.slice(0, 12),
+            ...(exploreSymbols === undefined
+              ? {}
+              : {
+                  symbols: exploreSymbols.slice(0, 12).map((symbol) => ({
+                    id: symbol.id,
+                    file: symbol.file,
+                    lines: [symbol.startLine + 1, symbol.endLine + 1],
+                    tokens: symbol.tokens,
+                    via: symbol.via,
+                    ...(config.includeSnippets ? { snippet: symbol.snippet ?? "" } : {}),
+                  })),
+                  tokensUsed: context!.tokensUsed,
+                  budgetTokens: effectiveBudget,
+                  dynamicBoundaries: boundariesIn(exploreSymbols).map((boundary) => ({
+                    at: `${boundary.file}:${boundary.line}`,
+                    form: boundary.form,
+                    ...(boundary.key === undefined ? {} : { key: boundary.key }),
+                  })),
+                  edges: context!.edges.map((edge) => ({
+                    from: edge.from,
+                    to: edge.to,
+                    via: edge.via,
+                  })),
+                  blastRadius: context!.blastRadius.map((entry) => ({
+                    symbol: entry.id,
+                    at: `${entry.file}:${entry.startLine + 1}`,
+                    callers: entry.callers,
+                    callerFiles: entry.callerFiles,
+                    ...(entry.testFiles.length > 0
+                      ? { tests: entry.testFiles }
+                      : { tests: [], warning: "no covering tests found" }),
+                  })),
+                  graphFiles: context!.files.slice(0, 12),
+                }),
+            ...(trace === undefined ? {} : { trace: trace.symbols }),
+            graphCompleteness: ready.index.graphCompletenessReliable
+              ? `>= ${(ready.index.graphCompleteness * 100).toFixed(0)}%`
+              : "not estimable — too few edges were found by more than one strategy",
+            ...inventoryLimitField(ready.root),
+            timingMs: { index: indexMs, ...result.timingMs },
+            ...(result.mode === "explore" && config.includeSnippets
+              ? {
+                  note:
+                    "Snippets are truncated bodies — treat them as already Read. Open a file only when you need lines beyond them. " +
+                    "graphCompleteness is a lower bound; reflection and dynamic dispatch are invisible to static analysis.",
+                }
+              : {}),
+            next:
+              result.mode === "trace"
+                ? trace?.symbols.length === 0
+                  ? "No indexed definition enclosed an exact hit. Refine the identifier or use instant_grep; an empty trace is not proof of no relation."
+                  : "The exact definition and direct relation above answer this trace. Answer now; do not call instant_grep or code_graph_context unless the user asks for source beyond this result or a wider structure."
+                : exploreSymbols === undefined || exploreSymbols.length === 0
+                  ? "No ranked symbols for this query. Answer from exactHits if present, or refine the question; do not start a multi-tool search loop."
+                  : "Exact hits plus Read-equivalent snippets, edges, and blast radius above answer this exploration. Answer now; do not call instant_grep, symbol_lookup, or code_graph_context unless you need lines beyond the snippets or a wider structure.",
+          },
+          null,
+          2,
+        );
       } catch (error) {
         return {
           content: [{ type: "text" as const, text: `codebase_query failed: ${String(error)}` }],
@@ -992,10 +1092,7 @@ export default async function plugin(bb: BbPluginApi) {
       "exact test-hit answer. Treat returned snippets as already read. Before concluding a symbol has " +
       "no callers, read graphCompleteness and dynamicBoundaries: a missing edge is not an absent one.",
     parameters: z.object({
-      seeds: z
-        .array(z.string())
-        .default([])
-        .describe("Symbol names or file paths already known to be relevant."),
+      seeds: z.array(z.string()).default([]).describe("Symbol names or file paths already known to be relevant."),
       query: z
         .string()
         .default("")
@@ -1003,16 +1100,13 @@ export default async function plugin(bb: BbPluginApi) {
           "What you are trying to do. When seeds are omitted this is also the retrieval " +
             "query, so phrase it as a question about the code.",
         ),
-      budgetTokens: z
-        .number()
-        .int()
-        .positive()
-        .optional()
-        .describe("Token budget. Omit to use the plugin setting."),
+      budgetTokens: z.number().int().positive().optional().describe("Token budget. Omit to use the plugin setting."),
       root: z
         .string()
         .optional()
-        .describe("Explicit server-local root. Omit to use the current thread workspace, including a remote environment."),
+        .describe(
+          "Explicit server-local root. Omit to use the current thread workspace, including a remote environment.",
+        ),
     }),
     async execute({ seeds, query, budgetTokens, root: requestedRoot }, { threadId, projectId, signal }) {
       const root = await resolveRoot(projectId ?? null, requestedRoot ?? null, threadId, signal);
@@ -1021,8 +1115,7 @@ export default async function plugin(bb: BbPluginApi) {
           content: [
             {
               type: "text" as const,
-              text:
-                "No BB project repository is available. Open a project or pass `root` explicitly.",
+              text: "No BB project repository is available. Open a project or pass `root` explicitly.",
             },
           ],
           isError: true,
@@ -1081,9 +1174,7 @@ export default async function plugin(bb: BbPluginApi) {
             // confirmed, uniqueName and uniqueMethod are name-based guesses,
             // importEdge is a declared dependency, cochange is git history.
             via: symbol.via,
-            ...(config.includeSnippets
-              ? { snippet: symbol.snippet ?? "" }
-              : {}),
+            ...(config.includeSnippets ? { snippet: symbol.snippet ?? "" } : {}),
           })),
           tokensUsed: result.tokensUsed,
           budgetTokens: effectiveBudget,
@@ -1162,24 +1253,38 @@ export default async function plugin(bb: BbPluginApi) {
       "an edit, or when the active repository is unclear. Treat its check names as candidates for " +
       "verify_change, not permission to run arbitrary commands.",
     parameters: z.object({
-      root: z.string().optional().describe("Explicit server-local root. Omit to use the current thread workspace, including a remote environment."),
+      root: z
+        .string()
+        .optional()
+        .describe(
+          "Explicit server-local root. Omit to use the current thread workspace, including a remote environment.",
+        ),
     }),
     async execute({ root: requestedRoot }, { threadId, projectId, signal }) {
       const root = await resolveRoot(projectId ?? null, requestedRoot ?? null, threadId, signal);
       if (root === null) {
         return {
-          content: [{ type: "text" as const, text: "No BB project repository is available. Open a project or pass `root` explicitly." }],
+          content: [
+            {
+              type: "text" as const,
+              text: "No BB project repository is available. Open a project or pass `root` explicitly.",
+            },
+          ],
           isError: true,
         };
       }
       try {
         const ready = await ensureIndex(root, signal);
         const context = repositoryContexts.get(ready.root)!.context;
-        return JSON.stringify({
-          ...context,
-          summary: repositoryContextSummary(context),
-          note: "Only fixed root manifests, README.md, two named docs overview files, and AGENTS.md/CONTRIBUTING.md are read. Secret files and arbitrary paths are excluded.",
-        }, null, 2);
+        return JSON.stringify(
+          {
+            ...context,
+            summary: repositoryContextSummary(context),
+            note: "Only fixed root manifests, README.md, two named docs overview files, and AGENTS.md/CONTRIBUTING.md are read. Secret files and arbitrary paths are excluded.",
+          },
+          null,
+          2,
+        );
       } catch (error) {
         return {
           content: [{ type: "text" as const, text: `repository_context failed: ${String(error)}` }],
@@ -1200,33 +1305,52 @@ export default async function plugin(bb: BbPluginApi) {
       "For an edit, still call prechange_impact after resolving the target. A missing static " +
       "reference is inconclusive when graph limitations apply.",
     parameters: z.object({
-      targets: z.array(z.string().min(1)).min(1).max(30).describe("Exact symbol ids, source-file paths, or a bare name only when it is unique."),
-      root: z.string().optional().describe("Explicit server-local root. Omit to use the current thread workspace, including a remote environment."),
+      targets: z
+        .array(z.string().min(1))
+        .min(1)
+        .max(30)
+        .describe("Exact symbol ids, source-file paths, or a bare name only when it is unique."),
+      root: z
+        .string()
+        .optional()
+        .describe(
+          "Explicit server-local root. Omit to use the current thread workspace, including a remote environment.",
+        ),
     }),
     async execute({ targets, root: requestedRoot }, { threadId, projectId, signal }) {
       const root = await resolveRoot(projectId ?? null, requestedRoot ?? null, threadId, signal);
       if (root === null) {
         return {
-          content: [{ type: "text" as const, text: "No BB project repository is available. Open a project or pass `root` explicitly." }],
+          content: [
+            {
+              type: "text" as const,
+              text: "No BB project repository is available. Open a project or pass `root` explicitly.",
+            },
+          ],
           isError: true,
         };
       }
       try {
         const ready = await ensureIndex(root, signal);
         const report = lookupSymbols(ready.index, targets);
-        return JSON.stringify({
-          root: rootLabel(ready.root),
-          ...report,
-          graphCompleteness: ready.index.graphCompletenessReliable
-            ? `>= ${(ready.index.graphCompleteness * 100).toFixed(0)}% of call edges (lower bound)`
-            : "not estimable — too few overlapping resolution strategies",
-          ambiguousCalls: ready.index.ambiguousCalls,
-          ...inventoryLimitField(ready.root),
-          note: "Direct static references only. Reflection, dynamic dispatch, DI, generated code, and unparsed languages are outside the graph.",
-          next: report.ambiguous.length > 0
-            ? "Choose an exact symbol id or source-file path, then call again."
-            : "Use prechange_impact before editing a resolved implementation target.",
-        }, null, 2);
+        return JSON.stringify(
+          {
+            root: rootLabel(ready.root),
+            ...report,
+            graphCompleteness: ready.index.graphCompletenessReliable
+              ? `>= ${(ready.index.graphCompleteness * 100).toFixed(0)}% of call edges (lower bound)`
+              : "not estimable — too few overlapping resolution strategies",
+            ambiguousCalls: ready.index.ambiguousCalls,
+            ...inventoryLimitField(ready.root),
+            note: "Direct static references only. Reflection, dynamic dispatch, DI, generated code, and unparsed languages are outside the graph.",
+            next:
+              report.ambiguous.length > 0
+                ? "Choose an exact symbol id or source-file path, then call again."
+                : "Use prechange_impact before editing a resolved implementation target.",
+          },
+          null,
+          2,
+        );
       } catch (error) {
         return {
           content: [{ type: "text" as const, text: `symbol_lookup failed: ${String(error)}` }],
@@ -1262,13 +1386,20 @@ export default async function plugin(bb: BbPluginApi) {
       root: z
         .string()
         .optional()
-        .describe("Explicit server-local root. Omit to use the current thread workspace, including a remote environment."),
+        .describe(
+          "Explicit server-local root. Omit to use the current thread workspace, including a remote environment.",
+        ),
     }),
     async execute({ targets, root: requestedRoot }, { threadId, projectId, signal }) {
       const root = await resolveRoot(projectId ?? null, requestedRoot ?? null, threadId, signal);
       if (root === null) {
         return {
-          content: [{ type: "text" as const, text: "No BB project repository is available. Open a project or pass `root` explicitly." }],
+          content: [
+            {
+              type: "text" as const,
+              text: "No BB project repository is available. Open a project or pass `root` explicitly.",
+            },
+          ],
           isError: true,
         };
       }
@@ -1382,15 +1513,32 @@ export default async function plugin(bb: BbPluginApi) {
       "for prechange_impact. Read every attempted check, skipped check, exit code, and graph " +
       "limitation; a passed command does not prove dynamic runtime wiring is safe.",
     parameters: z.object({
-      targets: z.array(z.string().min(1)).min(1).max(30).describe("Exact symbol ids or source-file paths that were changed."),
-      mode: z.enum(["affected", "full"]).default("affected").describe("Affected passes recognized Vitest test files; full runs every declared check without filters."),
-      root: z.string().optional().describe("Explicit server-local root. Omit to use the current thread workspace, including a remote environment."),
+      targets: z
+        .array(z.string().min(1))
+        .min(1)
+        .max(30)
+        .describe("Exact symbol ids or source-file paths that were changed."),
+      mode: z
+        .enum(["affected", "full"])
+        .default("affected")
+        .describe("Affected passes recognized Vitest test files; full runs every declared check without filters."),
+      root: z
+        .string()
+        .optional()
+        .describe(
+          "Explicit server-local root. Omit to use the current thread workspace, including a remote environment.",
+        ),
     }),
     async execute({ targets, mode, root: requestedRoot }, { threadId, projectId, signal }) {
       const root = await resolveRoot(projectId ?? null, requestedRoot ?? null, threadId, signal);
       if (root === null) {
         return {
-          content: [{ type: "text" as const, text: "No BB project repository is available. Open a project or pass `root` explicitly." }],
+          content: [
+            {
+              type: "text" as const,
+              text: "No BB project repository is available. Open a project or pass `root` explicitly.",
+            },
+          ],
           isError: true,
         };
       }
@@ -1399,18 +1547,28 @@ export default async function plugin(bb: BbPluginApi) {
         const impact = analyzeImpact(ready.index, targets);
         if (impact.unresolved.length > 0 || impact.ambiguous.length > 0) {
           return {
-            content: [{
-              type: "text" as const,
-              text: JSON.stringify({
-                error: "Verification stopped: every changed target must be exact.",
-                unresolved: impact.unresolved,
-                ambiguous: impact.ambiguous.map((entry) => ({
-                  requested: entry.requested,
-                  matches: entry.matches.map((match) => ({ id: match.id, file: match.file, line: match.startLine + 1 })),
-                })),
-                next: "Use a listed symbol id or exact source-file path, then call again.",
-              }, null, 2),
-            }],
+            content: [
+              {
+                type: "text" as const,
+                text: JSON.stringify(
+                  {
+                    error: "Verification stopped: every changed target must be exact.",
+                    unresolved: impact.unresolved,
+                    ambiguous: impact.ambiguous.map((entry) => ({
+                      requested: entry.requested,
+                      matches: entry.matches.map((match) => ({
+                        id: match.id,
+                        file: match.file,
+                        line: match.startLine + 1,
+                      })),
+                    })),
+                    next: "Use a listed symbol id or exact source-file path, then call again.",
+                  },
+                  null,
+                  2,
+                ),
+              },
+            ],
             isError: true,
           };
         }
@@ -1418,24 +1576,30 @@ export default async function plugin(bb: BbPluginApi) {
         const plan = planVerification(context, impact, mode);
         const verification = isRemoteRoot(ready.root)
           ? {
-            execution: "not-run",
-            reason: "The workspace is remote. Verification commands are not run on the BB server because that could execute in a different checkout.",
-            plan,
-          }
+              execution: "not-run",
+              reason:
+                "The workspace is remote. Verification commands are not run on the BB server because that could execute in a different checkout.",
+              plan,
+            }
           : await runVerification(plan, { signal });
-        return JSON.stringify({
-          root: rootLabel(ready.root),
-          targets: impact.targets.map((target) => ({ id: target.id, file: target.file, line: target.startLine + 1 })),
-          testReferences: impact.testReferences,
-          verification,
-          blindSpots: {
-            graphCompleteness: ready.index.graphCompletenessReliable
-              ? `>= ${(ready.index.graphCompleteness * 100).toFixed(0)}% of call edges (lower bound)`
-              : "not estimable — too few overlapping resolution strategies",
-            ...inventoryLimitField(ready.root),
-            notProven: "Passing declared checks does not prove reflection, dynamic dispatch, DI, generated code, or unparsed languages are safe.",
+        return JSON.stringify(
+          {
+            root: rootLabel(ready.root),
+            targets: impact.targets.map((target) => ({ id: target.id, file: target.file, line: target.startLine + 1 })),
+            testReferences: impact.testReferences,
+            verification,
+            blindSpots: {
+              graphCompleteness: ready.index.graphCompletenessReliable
+                ? `>= ${(ready.index.graphCompleteness * 100).toFixed(0)}% of call edges (lower bound)`
+                : "not estimable — too few overlapping resolution strategies",
+              ...inventoryLimitField(ready.root),
+              notProven:
+                "Passing declared checks does not prove reflection, dynamic dispatch, DI, generated code, or unparsed languages are safe.",
+            },
           },
-        }, null, 2);
+          null,
+          2,
+        );
       } catch (error) {
         return {
           content: [{ type: "text" as const, text: `verify_change failed: ${String(error)}` }],
@@ -1489,9 +1653,9 @@ export default async function plugin(bb: BbPluginApi) {
               const stillThere = isRemoteRoot(root)
                 ? true
                 : await stat(root).then(
-                  (info) => info.isDirectory(),
-                  () => false,
-                );
+                    (info) => info.isDirectory(),
+                    () => false,
+                  );
               if (!stillThere) {
                 snapshots.delete(root);
                 staleness.delete(root);
@@ -1522,10 +1686,7 @@ export default async function plugin(bb: BbPluginApi) {
           }
         }
         await new Promise<void>((resolve) => {
-          const timer = setTimeout(
-            resolve,
-            config.refreshIntervalSeconds * 1_000,
-          );
+          const timer = setTimeout(resolve, config.refreshIntervalSeconds * 1_000);
           signal.addEventListener("abort", () => {
             clearTimeout(timer);
             resolve();
@@ -1542,7 +1703,9 @@ export default async function plugin(bb: BbPluginApi) {
     return buildInstruction(
       root === null ? null : summaryOf(indexes.get(root), rootLabel),
       config.instructionStyle,
-      root === null ? undefined : repositoryContexts.get(root)?.context && repositoryContextSummary(repositoryContexts.get(root)!.context),
+      root === null
+        ? undefined
+        : repositoryContexts.get(root)?.context && repositoryContextSummary(repositoryContexts.get(root)!.context),
     );
   });
 
@@ -1554,7 +1717,9 @@ export default async function plugin(bb: BbPluginApi) {
     const instructions = buildInstruction(
       root === null ? null : summaryOf(indexes.get(root), rootLabel),
       config.instructionStyle,
-      root === null ? undefined : repositoryContexts.get(root)?.context && repositoryContextSummary(repositoryContexts.get(root)!.context),
+      root === null
+        ? undefined
+        : repositoryContexts.get(root)?.context && repositoryContextSummary(repositoryContexts.get(root)!.context),
     );
     return {
       tools: [...agentToolsForSurface(config.toolSurface)],
@@ -1607,10 +1772,7 @@ export default async function plugin(bb: BbPluginApi) {
     })();
   });
 
-  async function settingsIndexStatus(
-    projectId: string | null,
-    requestedRoot: string | null = null,
-  ) {
+  async function settingsIndexStatus(projectId: string | null, requestedRoot: string | null = null) {
     let root = await resolveRoot(projectId, requestedRoot);
     if (root === null) root = activeRoot ?? indexes.list()[0]?.root ?? null;
 
@@ -1621,8 +1783,7 @@ export default async function plugin(bb: BbPluginApi) {
     }
 
     const entry = root === null ? undefined : indexes.get(root);
-    const snapshot =
-      root === null ? null : (snapshots.get(root) ?? loadSnapshot(db, root));
+    const snapshot = root === null ? null : (snapshots.get(root) ?? loadSnapshot(db, root));
     return {
       root,
       indexed: entry !== undefined,
@@ -1635,10 +1796,7 @@ export default async function plugin(bb: BbPluginApi) {
     };
   }
 
-  function refreshIndexesAfterConfigChange(
-    previous: CodeGraphConfig,
-    next: CodeGraphConfig,
-  ): void {
+  function refreshIndexesAfterConfigChange(previous: CodeGraphConfig, next: CodeGraphConfig): void {
     const indexShapeChanged =
       previous.respectGitignore !== next.respectGitignore ||
       previous.includeHiddenDirectories !== next.includeHiddenDirectories ||
@@ -1650,9 +1808,7 @@ export default async function plugin(bb: BbPluginApi) {
           .refresh(entry.root, () => rebuildIndex(entry.root))
           .then((ready) => refreshRepositoryContext(ready))
           .catch((error) => {
-            bb.log.warn(
-              `could not apply settings to ${entry.root}: ${String(error)}`,
-            );
+            bb.log.warn(`could not apply settings to ${entry.root}: ${String(error)}`);
           });
       }
     }
@@ -1668,9 +1824,9 @@ export default async function plugin(bb: BbPluginApi) {
     status() {
       const answers = db.prepare(`SELECT COUNT(*) AS n FROM answers`).get() as { n: number };
       const outcomes = db.prepare(`SELECT COUNT(*) AS n FROM outcomes`).get() as { n: number };
-      const rate = db
-        .prepare(`SELECT AVG(recall) AS r FROM outcomes WHERE recall IS NOT NULL`)
-        .get() as { r: number | null };
+      const rate = db.prepare(`SELECT AVG(recall) AS r FROM outcomes WHERE recall IS NOT NULL`).get() as {
+        r: number | null;
+      };
 
       const active = activeRoot === null ? undefined : indexes.get(activeRoot);
       const all = indexes.list();
@@ -1808,21 +1964,19 @@ export default async function plugin(bb: BbPluginApi) {
       if (command === "status") {
         const answers = db.prepare(`SELECT COUNT(*) AS n FROM answers`).get() as { n: number };
         const outcomes = db.prepare(`SELECT COUNT(*) AS n FROM outcomes`).get() as { n: number };
-        const rate = db
-          .prepare(`SELECT AVG(recall) AS r FROM outcomes WHERE recall IS NOT NULL`)
-          .get() as { r: number | null };
+        const rate = db.prepare(`SELECT AVG(recall) AS r FROM outcomes WHERE recall IS NOT NULL`).get() as {
+          r: number | null;
+        };
         const all = indexes.list();
-        const rows = all.map(
-          (entry) => {
-            const inventory = remoteInventories.get(entry.root);
-            return [
-              entry.root,
-              `  symbols: ${entry.index.symbols.length}, edges: ${entry.edgeCount}, ` +
-                `completeness: >= ${(entry.index.graphCompleteness * 100).toFixed(1)}%`,
-              ...(inventory === undefined ? [] : [`  ${formatRemoteInventory(inventory)}`]),
-            ].join("\n");
-          },
-        );
+        const rows = all.map((entry) => {
+          const inventory = remoteInventories.get(entry.root);
+          return [
+            entry.root,
+            `  symbols: ${entry.index.symbols.length}, edges: ${entry.edgeCount}, ` +
+              `completeness: >= ${(entry.index.graphCompleteness * 100).toFixed(1)}%`,
+            ...(inventory === undefined ? [] : [`  ${formatRemoteInventory(inventory)}`]),
+          ].join("\n");
+        });
         return {
           exitCode: 0,
           stdout:
@@ -1837,9 +1991,7 @@ export default async function plugin(bb: BbPluginApi) {
         const rows = feedbackBySurface();
         return {
           exitCode: 0,
-          stdout: rest.includes("--json")
-            ? `${JSON.stringify(rows, null, 2)}\n`
-            : formatFeedbackBySurface(),
+          stdout: rest.includes("--json") ? `${JSON.stringify(rows, null, 2)}\n` : formatFeedbackBySurface(),
         };
       }
 
@@ -1874,10 +2026,7 @@ export default async function plugin(bb: BbPluginApi) {
           return { exitCode: 2, stderr: `usage: bb code-intelligence ${command} <file>\n` };
         }
         const rootFlag = rest.indexOf("--root");
-        const root = await resolveRoot(
-          ctx.projectId ?? null,
-          rootFlag >= 0 ? (rest[rootFlag + 1] ?? null) : null,
-        );
+        const root = await resolveRoot(ctx.projectId ?? null, rootFlag >= 0 ? (rest[rootFlag + 1] ?? null) : null);
         if (root === null) {
           return { exitCode: 2, stderr: "could not resolve a repository root\n" };
         }
@@ -1967,7 +2116,12 @@ export default async function plugin(bb: BbPluginApi) {
         // Snippets are attached even though the text output prints locations
         // only: the boundary scan reads bodies, and reading them here costs one
         // pass over files the answer already names.
-        const cliSymbols = await attachSnippets(ready.root, result.symbols, BODY_LINE_LIMIT, remoteSources.get(ready.root));
+        const cliSymbols = await attachSnippets(
+          ready.root,
+          result.symbols,
+          BODY_LINE_LIMIT,
+          remoteSources.get(ready.root),
+        );
         const lines = result.symbols.map((symbol) => {
           const head = `  ${symbol.file}:${symbol.startLine + 1}  ${symbol.name}  (${symbol.tokens}t)`;
           const parts = symbol.components;
@@ -1991,7 +2145,10 @@ export default async function plugin(bb: BbPluginApi) {
         };
       }
 
-      return { exitCode: 2, stderr: "usage: bb code-intelligence <status|feedback|instruction|index|context|export|import>\n" };
+      return {
+        exitCode: 2,
+        stderr: "usage: bb code-intelligence <status|feedback|instruction|index|context|export|import>\n",
+      };
     },
   });
 
@@ -2010,7 +2167,7 @@ function summaryOf(
   return entry === undefined
     ? null
     : {
-      root: displayRoot(entry.root),
+        root: displayRoot(entry.root),
         symbols: entry.index.symbols.length,
         graphCompleteness: entry.index.graphCompleteness,
         graphCompletenessReliable: entry.index.graphCompletenessReliable,
@@ -2037,12 +2194,9 @@ async function currentSequence(bb: BbPluginApi, threadId: string): Promise<numbe
 async function readEvents(bb: BbPluginApi, threadId: string): Promise<ThreadEvent[]> {
   try {
     const response = (await bb.sdk.threads.events.list({ threadId })) as unknown;
-    const list = Array.isArray(response)
-      ? response
-      : ((response as { events?: unknown[] }).events ?? []);
+    const list = Array.isArray(response) ? response : ((response as { events?: unknown[] }).events ?? []);
     return list.filter(
-      (entry): entry is ThreadEvent =>
-        typeof entry === "object" && entry !== null && "seq" in entry && "type" in entry,
+      (entry): entry is ThreadEvent => typeof entry === "object" && entry !== null && "seq" in entry && "type" in entry,
     );
   } catch {
     return [];
@@ -2085,21 +2239,15 @@ function formatBoundaries(boundaries: readonly DynamicBoundary[]): string {
       `  ${boundary.file}:${boundary.line} — ${boundary.label}` +
       (boundary.key === undefined ? "" : ` (ключ «${boundary.key}»)`),
   );
-  return (
-    `\nздесь статический путь кончается (рёбра не выдуманы, граница объявлена):\n` +
-    `${lines.join("\n")}\n`
-  );
+  return `\nздесь статический путь кончается (рёбра не выдуманы, граница объявлена):\n` + `${lines.join("\n")}\n`;
 }
 
 function formatBlastRadius(radius: readonly BlastRadius[]): string {
   if (radius.length === 0) return "";
   const lines = radius.map((entry) => {
-    const where =
-      entry.callerFiles.length > 0 ? ` в ${entry.callerFiles.join(", ")}` : "";
+    const where = entry.callerFiles.length > 0 ? ` в ${entry.callerFiles.join(", ")}` : "";
     const tests =
-      entry.testFiles.length > 0
-        ? `; тесты: ${entry.testFiles.join(", ")}`
-        : "; ⚠️ покрывающих тестов не найдено";
+      entry.testFiles.length > 0 ? `; тесты: ${entry.testFiles.join(", ")}` : "; ⚠️ покрывающих тестов не найдено";
     return `  ${entry.name} (${entry.file}:${entry.startLine + 1}) — ${entry.callers} вызывающих${where}${tests}`;
   });
   return `\nзависят от этого (проверить перед правкой):\n${lines.join("\n")}\n`;
@@ -2124,7 +2272,7 @@ async function attachSnippets(
   for (const symbol of symbols) {
     if (linesByFile.has(symbol.file)) continue;
     try {
-      const source = sources?.get(symbol.file) ?? await readFile(join(root, symbol.file), "utf8");
+      const source = sources?.get(symbol.file) ?? (await readFile(join(root, symbol.file), "utf8"));
       linesByFile.set(symbol.file, source.split("\n"));
     } catch {
       linesByFile.set(symbol.file, []);
