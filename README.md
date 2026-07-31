@@ -96,29 +96,30 @@ that C preprocessor semantics or a compiler's type system are modelled.
 
 ## Evidence, not promises
 
-The current [cross-language A/B](bench/results/2026-07-31-agent-value-v2.md)
+The current [cross-language A/B](bench/results/2026-07-31-agent-value-v3.md)
 ran 50 fresh, read-only BB threads: five predeclared navigation questions in
 five pinned public repositories (Go, Rust, C, C++, Java), five repetitions per
 arm. The provider/model, permission mode, BB version, and fixture commit were
 kept fixed.
 
-| Measured result | Without plugin | With plugin |
-| --- | ---: | ---: |
-| Correct final answers | `25 / 25` | `25 / 25` |
-| Native Code Intelligence calls | `0` | `61` |
-| Shell discovery calls | `42` | `10` |
-| Total discovery operations | `42` | `71` |
-| Median full-turn time | `14.0 s` | `16.6 s` |
+| Measured result | Without plugin | With plugin | Change |
+| --- | ---: | ---: | ---: |
+| Correct final answers | `25 / 25` | `25 / 25` | preserved |
+| Native Code Intelligence calls | `0` | `35` | replaces shell discovery |
+| Shell discovery calls | `43` | `3` | **93.0% fewer** |
+| Total discovery operations | `43` | `38` | **11.6% fewer** |
+| Median full-turn time | `12.1 s` | `11.6 s` | **4.4% lower** |
 
 So the demonstrated value is **structured native navigation without losing
-correctness**: the enabled runs replaced 76% of observed shell-search calls
-with Code Intelligence tools. It is not a claim that every task becomes faster
-or uses fewer operations — this particular short-task sample did not. Read the
-[method and per-language results](bench/results/2026-07-31-agent-value-v2.md),
+correctness**: on this fixed cross-language task set, the enabled arm made 40
+fewer shell-search calls, 5 fewer discovery operations, and had a 529 ms lower
+median full-turn time. Read the [method and per-language results](bench/results/2026-07-31-agent-value-v3.md),
 [task contract](bench/tasks/agent-value-v2.json), and
-[raw rows](bench/results/2026-07-31-agent-value-v2.json) before drawing a
-broader conclusion. The earlier TypeScript
-[routing pilot](bench/results/2026-07-31-agent-routing-smoke-v1.md) remains as
+[raw rows](bench/results/2026-07-31-agent-value-v3.json) before drawing a
+broader conclusion. Individual task samples still vary, so these figures do
+not claim a universal speed improvement. The prior cross-language
+[v2 report](bench/results/2026-07-31-agent-value-v2.md) and earlier TypeScript
+[routing pilot](bench/results/2026-07-31-agent-routing-smoke-v1.md) remain as
 historical evidence.
 
 That A/B also found a concrete Java host-snapshot incompatibility: a familiar

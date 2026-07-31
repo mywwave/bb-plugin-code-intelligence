@@ -9,7 +9,9 @@ The current cross-language evidence suite is
 [`tasks/agent-value-v2.json`](tasks/agent-value-v2.json): five pinned public
 repositories (Go, Rust, C, C++, and Java), five read-only navigation questions,
 and five fresh repetitions in each arm. Its report and raw result data are
-[published](results/2026-07-31-agent-value-v2.md) beside the task contract.
+[published](results/2026-07-31-agent-value-v3.md) beside the task contract.
+The earlier [v2 result](results/2026-07-31-agent-value-v2.md) remains a
+historical pre-fix measurement.
 The Java host-snapshot glob regression discovered by that suite has its own
 [targeted A/B record](results/2026-07-31-java-glob-regression-v1.md); it does
 not replace the cross-language result.
