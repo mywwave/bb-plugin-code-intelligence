@@ -57,6 +57,12 @@ export interface CodebaseTraceSymbol {
   readonly lines: readonly [number, number];
   readonly callers: readonly CodebaseTraceRelation[];
   readonly callees: readonly CodebaseTraceRelation[];
+  readonly supertypes: readonly CodebaseTraceRelation[];
+  readonly subtypes: readonly CodebaseTraceRelation[];
+  readonly implements: readonly CodebaseTraceRelation[];
+  readonly implementations: readonly CodebaseTraceRelation[];
+  readonly overrides: readonly CodebaseTraceRelation[];
+  readonly overriddenBy: readonly CodebaseTraceRelation[];
 }
 
 export interface CodebaseTraceResult {
@@ -124,14 +130,14 @@ function matchIndexFile(file: string): string {
   return file.replace(/\\/g, "/").replace(/^\.\//, "");
 }
 
-function relation(index: RetrievalIndex, from: number, to: number): CodebaseTraceRelation {
+function relation(index: RetrievalIndex, from: number, to: number, via?: string | null): CodebaseTraceRelation {
   const symbol = index.symbols[to]!;
   return {
     id: symbol.id,
     name: symbol.name,
     file: symbol.file,
     line: symbol.startLine + 1,
-    via: index.strategyByPair.get(`${from}\u0000${to}`) || null,
+    via: via ?? (index.strategyByPair.get(`${from}\u0000${to}`) || null),
   };
 }
 
@@ -202,6 +208,12 @@ function directTrace(
       lines: [symbol.startLine + 1, symbol.endLine + 1],
       callers: uniqueRelations((index.callersOf.get(node) ?? []).map((caller) => relation(index, caller, node))).slice(0, 12),
       callees: uniqueRelations((index.calleesOf.get(node) ?? []).map((callee) => relation(index, node, callee))).slice(0, 12),
+      supertypes: uniqueRelations((index.supertypesOf.get(node) ?? []).map((target) => relation(index, node, target, "extends"))).slice(0, 12),
+      subtypes: uniqueRelations((index.subtypesOf.get(node) ?? []).map((target) => relation(index, node, target, "extends"))).slice(0, 12),
+      implements: uniqueRelations((index.implementsOf.get(node) ?? []).map((target) => relation(index, node, target, "implements"))).slice(0, 12),
+      implementations: uniqueRelations((index.implementationsOf.get(node) ?? []).map((target) => relation(index, node, target, "implements"))).slice(0, 12),
+      overrides: uniqueRelations((index.overridesOf.get(node) ?? []).map((target) => relation(index, node, target, "overrides"))).slice(0, 12),
+      overriddenBy: uniqueRelations((index.overriddenBy.get(node) ?? []).map((target) => relation(index, node, target, "overrides"))).slice(0, 12),
     });
   }
   return { symbols };

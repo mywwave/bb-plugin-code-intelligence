@@ -15265,7 +15265,7 @@ function toPosix(path) {
 }
 
 // src/graph/extract.ts
-var EXTRACTION_VERSION = 3;
+var EXTRACTION_VERSION = 4;
 var DEFINITION_TYPES = /* @__PURE__ */ new Map([
   ["function_declaration", "function"],
   ["function_definition", "function"],
@@ -15274,6 +15274,10 @@ var DEFINITION_TYPES = /* @__PURE__ */ new Map([
   ["class_declaration", "class"],
   ["class_definition", "class"],
   // python
+  // A type node is useful for hierarchy/implementation lookup. Interface
+  // method signatures are still not extracted, so this does not pollute call
+  // resolution with declaration-only methods.
+  ["interface_declaration", "class"],
   ["method_definition", "method"]
 ]);
 function estimateTokens(node) {
@@ -15310,6 +15314,7 @@ async function extractFile(file2, language, source) {
   const calls = [];
   const imports = [];
   const types = [];
+  const typeRelations = [];
   const MAX_DEPTH = 400;
   let truncated2 = false;
   const visit = (node, enclosing, container, depth) => {
@@ -15336,7 +15341,10 @@ async function extractFile(file2, language, source) {
         tokens: estimateTokens(node)
       });
       nextEnclosing = id;
-      if (definition.kind === "class") nextContainer = definition.name;
+      if (definition.kind === "class") {
+        nextContainer = definition.name;
+        typeRelations.push(...declaredTypeRelations(node, language, file2, definition.name));
+      }
     }
     collectTypeBindings(node, language, file2, nextContainer, types);
     const call = callFor(node, language);
@@ -15372,7 +15380,28 @@ async function extractFile(file2, language, source) {
     }
   };
   visit(root, null, null, 0);
-  return { file: file2, symbols, calls, imports, types, truncated: truncated2 };
+  return { file: file2, symbols, calls, imports, types, typeRelations, truncated: truncated2 };
+}
+function declaredTypeRelations(node, language, file2, subtype) {
+  const head = node.text.split(/[\n{]/, 1)[0] ?? "";
+  const names = (text) => [...text.matchAll(/[A-Za-z_$][\w$]*/g)].map((match) => match[0]).map((name) => name.split(".").at(-1)).filter((name) => name !== "extends" && name !== "implements");
+  const relations = [];
+  if (language === "python") {
+    const bases = head.match(/^\s*class\s+[A-Za-z_]\w*\s*\(([^)]*)\)/)?.[1] ?? "";
+    for (const supertype of names(bases)) relations.push({ file: file2, subtype, supertype, kind: "extends" });
+    return relations;
+  }
+  if (!["typescript", "tsx", "javascript", "java"].includes(language)) return relations;
+  const extendsText = head.match(/\bextends\s+([^\s,{]+)/)?.[1];
+  if (extendsText !== void 0) {
+    const supertype = names(extendsText)[0];
+    if (supertype !== void 0) relations.push({ file: file2, subtype, supertype, kind: "extends" });
+  }
+  const implementsText = head.match(/\bimplements\s+(.+)$/)?.[1] ?? "";
+  for (const supertype of names(implementsText)) {
+    relations.push({ file: file2, subtype, supertype, kind: "implements" });
+  }
+  return relations;
 }
 function symbolId(file2, name, kind, container, start) {
   const qualified = kind === "method" && container !== null ? `${container}.${name}` : name;
@@ -15725,10 +15754,12 @@ function resolveProject(files) {
   }
   const importEdges = buildImportEdges(files, symbolsByFile, knownFiles);
   const fileImports = collectFileImports(files, symbolsByFile, knownFiles);
+  const typeRelations = resolveTypeRelations(files, symbols);
   return {
     symbols,
     edges: [...edges, ...importEdges],
     fileImports,
+    typeRelations,
     stats: {
       resolved: edges.length,
       unknown: unknown2,
@@ -15738,6 +15769,43 @@ function resolveProject(files) {
     },
     captureCounts: [...captures.values()].map((trapped) => trapped.size)
   };
+}
+function resolveTypeRelations(files, symbols) {
+  const classesByName = /* @__PURE__ */ new Map();
+  const classesByFileName = /* @__PURE__ */ new Map();
+  const methodsByContainer = /* @__PURE__ */ new Map();
+  for (const symbol2 of symbols) {
+    if (symbol2.kind === "class") {
+      const named = classesByName.get(symbol2.name) ?? [];
+      named.push(symbol2);
+      classesByName.set(symbol2.name, named);
+      const local = classesByFileName.get(`${symbol2.file}\0${symbol2.name}`) ?? [];
+      local.push(symbol2);
+      classesByFileName.set(`${symbol2.file}\0${symbol2.name}`, local);
+    }
+    if (symbol2.kind === "method" && symbol2.container !== null) {
+      const methods = methodsByContainer.get(symbol2.container) ?? [];
+      methods.push(symbol2);
+      methodsByContainer.set(symbol2.container, methods);
+    }
+  }
+  const exact = (candidates) => candidates.length === 1 ? candidates[0] : null;
+  const resolveClass = (file2, name) => exact(classesByFileName.get(`${file2}\0${name}`) ?? []) ?? exact(classesByName.get(name) ?? []);
+  const result = [];
+  for (const file2 of files) {
+    for (const relation2 of file2.typeRelations) {
+      const subtype = resolveClass(relation2.file, relation2.subtype);
+      const supertype = resolveClass(relation2.file, relation2.supertype);
+      if (subtype === null || supertype === null || subtype.id === supertype.id) continue;
+      result.push({ subtype: subtype.id, supertype: supertype.id, kind: relation2.kind });
+      if (relation2.kind !== "extends") continue;
+      for (const method of methodsByContainer.get(subtype.name) ?? []) {
+        const overridden = (methodsByContainer.get(supertype.name) ?? []).filter((candidate) => candidate.name === method.name);
+        if (overridden.length === 1) result.push({ subtype: method.id, supertype: overridden[0].id, kind: "overrides" });
+      }
+    }
+  }
+  return result;
 }
 function buildImportEdges(files, symbolsByFile, knownFiles) {
   const result = [];
@@ -16122,6 +16190,12 @@ function buildIndex(scan, bodyOf, graphCompleteness, graphCompletenessReliable, 
   const edges = [];
   const callersOf = /* @__PURE__ */ new Map();
   const calleesOf = /* @__PURE__ */ new Map();
+  const supertypesOf = /* @__PURE__ */ new Map();
+  const subtypesOf = /* @__PURE__ */ new Map();
+  const implementsOf = /* @__PURE__ */ new Map();
+  const implementationsOf = /* @__PURE__ */ new Map();
+  const overridesOf = /* @__PURE__ */ new Map();
+  const overriddenBy = /* @__PURE__ */ new Map();
   const strategyByPair = /* @__PURE__ */ new Map();
   const importersOf = /* @__PURE__ */ new Map();
   for (const dependency of scan.fileImports ?? []) {
@@ -16150,6 +16224,26 @@ function buildIndex(scan, bodyOf, graphCompleteness, graphCompletenessReliable, 
     const callees = calleesOf.get(from);
     if (callees === void 0) calleesOf.set(from, [to]);
     else if (!callees.includes(to)) callees.push(to);
+  }
+  const addRelation = (map2, from, to) => {
+    const values = map2.get(from);
+    if (values === void 0) map2.set(from, [to]);
+    else if (!values.includes(to)) values.push(to);
+  };
+  for (const relation2 of scan.typeRelations ?? []) {
+    const subtype = indexById.get(relation2.subtype);
+    const supertype = indexById.get(relation2.supertype);
+    if (subtype === void 0 || supertype === void 0) continue;
+    if (relation2.kind === "extends") {
+      addRelation(supertypesOf, subtype, supertype);
+      addRelation(subtypesOf, supertype, subtype);
+    } else if (relation2.kind === "implements") {
+      addRelation(implementsOf, subtype, supertype);
+      addRelation(implementationsOf, supertype, subtype);
+    } else {
+      addRelation(overridesOf, subtype, supertype);
+      addRelation(overriddenBy, supertype, subtype);
+    }
   }
   const graph = buildSymmetricAdjacency(symbols.length, edges);
   const strategyByNode = /* @__PURE__ */ new Map();
@@ -16201,6 +16295,12 @@ function buildIndex(scan, bodyOf, graphCompleteness, graphCompletenessReliable, 
     strategyByNode,
     callersOf,
     calleesOf,
+    supertypesOf,
+    subtypesOf,
+    implementsOf,
+    implementationsOf,
+    overridesOf,
+    overriddenBy,
     strategyByPair,
     importersOf,
     nodesByFile,
@@ -17062,14 +17162,14 @@ function traceAnchor(candidates) {
 function matchIndexFile(file2) {
   return file2.replace(/\\/g, "/").replace(/^\.\//, "");
 }
-function relation(index, from, to) {
+function relation(index, from, to, via) {
   const symbol2 = index.symbols[to];
   return {
     id: symbol2.id,
     name: symbol2.name,
     file: symbol2.file,
     line: symbol2.startLine + 1,
-    via: index.strategyByPair.get(`${from}\0${to}`) || null
+    via: via ?? (index.strategyByPair.get(`${from}\0${to}`) || null)
   };
 }
 function uniqueRelations(relations) {
@@ -17114,7 +17214,13 @@ function directTrace(index, matches, anchor) {
       file: symbol2.file,
       lines: [symbol2.startLine + 1, symbol2.endLine + 1],
       callers: uniqueRelations((index.callersOf.get(node) ?? []).map((caller) => relation(index, caller, node))).slice(0, 12),
-      callees: uniqueRelations((index.calleesOf.get(node) ?? []).map((callee) => relation(index, node, callee))).slice(0, 12)
+      callees: uniqueRelations((index.calleesOf.get(node) ?? []).map((callee) => relation(index, node, callee))).slice(0, 12),
+      supertypes: uniqueRelations((index.supertypesOf.get(node) ?? []).map((target) => relation(index, node, target, "extends"))).slice(0, 12),
+      subtypes: uniqueRelations((index.subtypesOf.get(node) ?? []).map((target) => relation(index, node, target, "extends"))).slice(0, 12),
+      implements: uniqueRelations((index.implementsOf.get(node) ?? []).map((target) => relation(index, node, target, "implements"))).slice(0, 12),
+      implementations: uniqueRelations((index.implementationsOf.get(node) ?? []).map((target) => relation(index, node, target, "implements"))).slice(0, 12),
+      overrides: uniqueRelations((index.overridesOf.get(node) ?? []).map((target) => relation(index, node, target, "overrides"))).slice(0, 12),
+      overriddenBy: uniqueRelations((index.overriddenBy.get(node) ?? []).map((target) => relation(index, node, target, "overrides"))).slice(0, 12)
     });
   }
   return { symbols };
@@ -18287,6 +18393,7 @@ async function plugin(bb) {
         symbols: resolution.symbols,
         edges: resolution.edges,
         fileImports: resolution.fileImports,
+        typeRelations: resolution.typeRelations,
         ambiguousCalls: resolution.stats.ambiguous
       };
       mode = "indexed";
@@ -18297,6 +18404,7 @@ async function plugin(bb) {
         scan = {
           symbols: stored.symbols,
           edges: stored.edges,
+          typeRelations: resolveProject(extractions).typeRelations,
           ambiguousCalls: stored.ambiguousCalls
         };
         mode = "restored";
@@ -18315,6 +18423,7 @@ async function plugin(bb) {
           symbols: resolution.symbols,
           edges: resolution.edges,
           fileImports: resolution.fileImports,
+          typeRelations: resolution.typeRelations,
           ambiguousCalls: resolution.stats.ambiguous
         };
         mode = "updated";

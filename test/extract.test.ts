@@ -77,6 +77,49 @@ describe("extractFile", () => {
     expect(result.imports[0]?.local).toBe("helper");
   });
 
+  it("records declared inheritance and implementation facts without turning them into calls", async () => {
+    const typescript = await ts(
+      "src/types.ts",
+      [
+        "interface Reader { read(): string; }",
+        "class Base { run() {} }",
+        "class Worker extends Base implements Reader { run() {} read() { return ''; } }",
+      ].join("\n"),
+    );
+    const python = await extractFile(
+      "pkg/types.py",
+      "python",
+      "class Child(Base):\n    pass\n",
+    );
+
+    expect(typescript.typeRelations).toEqual([
+      { file: "src/types.ts", subtype: "Worker", supertype: "Base", kind: "extends" },
+      { file: "src/types.ts", subtype: "Worker", supertype: "Reader", kind: "implements" },
+    ]);
+    expect(python.typeRelations).toEqual([
+      { file: "pkg/types.py", subtype: "Child", supertype: "Base", kind: "extends" },
+    ]);
+    expect(typescript.calls).toEqual([]);
+  });
+
+  it("resolves hierarchy only when both declared types are unambiguous", async () => {
+    const files = [await ts(
+      "src/types.ts",
+      [
+        "interface Reader { read(): string; }",
+        "class Base { run() {} }",
+        "class Worker extends Base implements Reader { run() {} read() { return ''; } }",
+      ].join("\n"),
+    )];
+
+    const resolved = resolveProject(files);
+    expect(resolved.typeRelations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: "extends", subtype: expect.stringContaining("#Worker@"), supertype: expect.stringContaining("#Base@") }),
+      expect.objectContaining({ kind: "implements", subtype: expect.stringContaining("#Worker@"), supertype: expect.stringContaining("#Reader@") }),
+      expect.objectContaining({ kind: "overrides", subtype: expect.stringContaining("#Worker.run@"), supertype: expect.stringContaining("#Base.run@") }),
+    ]));
+  });
+
   it("extracts symbols, calls, imports, and direct type facts from core languages", async () => {
     const go = await extractFile(
       "svc/service.go",

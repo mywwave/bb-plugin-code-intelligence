@@ -371,6 +371,7 @@ export default async function plugin(bb: BbPluginApi) {
         symbols: resolution.symbols,
         edges: resolution.edges,
         fileImports: resolution.fileImports,
+        typeRelations: resolution.typeRelations,
         ambiguousCalls: resolution.stats.ambiguous,
       };
       mode = "indexed";
@@ -381,6 +382,7 @@ export default async function plugin(bb: BbPluginApi) {
         scan = {
           symbols: stored.symbols,
           edges: stored.edges,
+          typeRelations: resolveProject(extractions).typeRelations,
           ambiguousCalls: stored.ambiguousCalls,
         };
         mode = "restored";
@@ -401,6 +403,7 @@ export default async function plugin(bb: BbPluginApi) {
           symbols: resolution.symbols,
           edges: resolution.edges,
           fileImports: resolution.fileImports,
+          typeRelations: resolution.typeRelations,
           ambiguousCalls: resolution.stats.ambiguous,
         };
         mode = "updated";

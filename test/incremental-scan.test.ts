@@ -21,6 +21,7 @@ function extraction(file: string, symbolName: string): FileExtraction {
     calls: [],
     imports: [],
     types: [],
+    typeRelations: [],
   };
 }
 

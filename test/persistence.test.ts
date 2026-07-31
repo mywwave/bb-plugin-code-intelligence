@@ -72,9 +72,10 @@ const symbol = {
 const fileExtraction: FileExtraction = {
   file: "src/a.ts",
   symbols: [symbol],
-  calls: [],
-  imports: [],
-  types: [],
+    calls: [],
+    imports: [],
+    types: [],
+    typeRelations: [],
 };
 
 function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {

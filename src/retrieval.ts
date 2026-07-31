@@ -92,6 +92,13 @@ export interface RetrievalIndex {
    */
   readonly callersOf: ReadonlyMap<number, readonly number[]>;
   readonly calleesOf: ReadonlyMap<number, readonly number[]>;
+  /** Declared type relations, deliberately separate from direct call edges. */
+  readonly supertypesOf: ReadonlyMap<number, readonly number[]>;
+  readonly subtypesOf: ReadonlyMap<number, readonly number[]>;
+  readonly implementsOf: ReadonlyMap<number, readonly number[]>;
+  readonly implementationsOf: ReadonlyMap<number, readonly number[]>;
+  readonly overridesOf: ReadonlyMap<number, readonly number[]>;
+  readonly overriddenBy: ReadonlyMap<number, readonly number[]>;
   /** "from to" -> the strategy that resolved that reference. */
   readonly strategyByPair: ReadonlyMap<string, string>;
   /**
@@ -236,6 +243,12 @@ export interface IndexInput {
     readonly weight: number;
     readonly strategy?: string;
   }>;
+  /** Explicit hierarchy facts; never treated as caller/callee evidence. */
+  readonly typeRelations?: ReadonlyArray<{
+    readonly subtype: string;
+    readonly supertype: string;
+    readonly kind: "extends" | "implements" | "overrides";
+  }>;
   readonly ambiguousCalls: number;
 }
 
@@ -262,6 +275,12 @@ export function buildIndex(
   const edges: Edge[] = [];
   const callersOf = new Map<number, number[]>();
   const calleesOf = new Map<number, number[]>();
+  const supertypesOf = new Map<number, number[]>();
+  const subtypesOf = new Map<number, number[]>();
+  const implementsOf = new Map<number, number[]>();
+  const implementationsOf = new Map<number, number[]>();
+  const overridesOf = new Map<number, number[]>();
+  const overriddenBy = new Map<number, number[]>();
   const strategyByPair = new Map<string, string>();
   const importersOf = new Map<number, string[]>();
   for (const dependency of scan.fileImports ?? []) {
@@ -302,6 +321,26 @@ export function buildIndex(
     const callees = calleesOf.get(from);
     if (callees === undefined) calleesOf.set(from, [to]);
     else if (!callees.includes(to)) callees.push(to);
+  }
+  const addRelation = (map: Map<number, number[]>, from: number, to: number) => {
+    const values = map.get(from);
+    if (values === undefined) map.set(from, [to]);
+    else if (!values.includes(to)) values.push(to);
+  };
+  for (const relation of scan.typeRelations ?? []) {
+    const subtype = indexById.get(relation.subtype);
+    const supertype = indexById.get(relation.supertype);
+    if (subtype === undefined || supertype === undefined) continue;
+    if (relation.kind === "extends") {
+      addRelation(supertypesOf, subtype, supertype);
+      addRelation(subtypesOf, supertype, subtype);
+    } else if (relation.kind === "implements") {
+      addRelation(implementsOf, subtype, supertype);
+      addRelation(implementationsOf, supertype, subtype);
+    } else {
+      addRelation(overridesOf, subtype, supertype);
+      addRelation(overriddenBy, supertype, subtype);
+    }
   }
   const graph = buildSymmetricAdjacency(symbols.length, edges);
 
@@ -362,6 +401,12 @@ export function buildIndex(
     strategyByNode,
     callersOf,
     calleesOf,
+    supertypesOf,
+    subtypesOf,
+    implementsOf,
+    implementationsOf,
+    overridesOf,
+    overriddenBy,
     strategyByPair,
     importersOf,
     nodesByFile,

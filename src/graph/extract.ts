@@ -17,10 +17,11 @@ import { parseSource } from "./languages.js";
  * would otherwise look fresh: file hashes only say the code did not change,
  * never that our reading of it did not.
  *
+ * 4 — declared type hierarchy facts are retained separately from call sites.
  * 3 — symbol identifiers include their owner and source position, so same-named
  *     declarations in one file cannot overwrite each other in the graph.
  */
-export const EXTRACTION_VERSION = 3;
+export const EXTRACTION_VERSION = 4;
 
 export type SymbolKind = "function" | "class" | "method";
 
@@ -76,12 +77,21 @@ export interface TypeBinding {
   readonly container: string | null;
 }
 
+/** A declared inheritance or implementation relation, never inferred from calls. */
+export interface TypeRelation {
+  readonly file: string;
+  readonly subtype: string;
+  readonly supertype: string;
+  readonly kind: "extends" | "implements";
+}
+
 export interface FileExtraction {
   readonly file: string;
   readonly symbols: readonly CodeSymbol[];
   readonly calls: readonly CallSite[];
   readonly imports: readonly ImportBinding[];
   readonly types: readonly TypeBinding[];
+  readonly typeRelations: readonly TypeRelation[];
   /** The walk hit its depth limit here, so this file was read only in part. */
   readonly truncated?: boolean;
 }
@@ -92,6 +102,10 @@ const DEFINITION_TYPES: ReadonlyMap<string, SymbolKind> = new Map([
   ["generator_function_declaration", "function"],
   ["class_declaration", "class"],
   ["class_definition", "class"], // python
+  // A type node is useful for hierarchy/implementation lookup. Interface
+  // method signatures are still not extracted, so this does not pollute call
+  // resolution with declaration-only methods.
+  ["interface_declaration", "class"],
   ["method_definition", "method"],
 ]);
 
@@ -170,6 +184,7 @@ export async function extractFile(
   const calls: CallSite[] = [];
   const imports: ImportBinding[] = [];
   const types: TypeBinding[] = [];
+  const typeRelations: TypeRelation[] = [];
 
   /**
    * Depth at which the walk stops descending.
@@ -216,7 +231,10 @@ export async function extractFile(
           tokens: estimateTokens(node),
         });
         nextEnclosing = id;
-        if (definition.kind === "class") nextContainer = definition.name;
+        if (definition.kind === "class") {
+          nextContainer = definition.name;
+          typeRelations.push(...declaredTypeRelations(node, language, file, definition.name));
+        }
     }
 
     collectTypeBindings(node, language, file, nextContainer, types);
@@ -273,7 +291,42 @@ export async function extractFile(
 
   visit(root, null, null, 0);
 
-  return { file, symbols, calls, imports, types, truncated };
+  return { file, symbols, calls, imports, types, typeRelations, truncated };
+}
+
+function declaredTypeRelations(
+  node: AstNode,
+  language: LanguageId,
+  file: string,
+  subtype: string,
+): readonly TypeRelation[] {
+  // The declaration head is a direct syntactic fact. Keep it separate from
+  // call resolution: an `extends` clause proves a hierarchy relation, not that
+  // either type calls the other.
+  const head = node.text.split(/[\n{]/, 1)[0] ?? "";
+  const names = (text: string): string[] => [...text.matchAll(/[A-Za-z_$][\w$]*/g)]
+    .map((match) => match[0]!)
+    .map((name) => name.split(".").at(-1)!)
+    .filter((name) => name !== "extends" && name !== "implements");
+  const relations: TypeRelation[] = [];
+
+  if (language === "python") {
+    const bases = head.match(/^\s*class\s+[A-Za-z_]\w*\s*\(([^)]*)\)/)?.[1] ?? "";
+    for (const supertype of names(bases)) relations.push({ file, subtype, supertype, kind: "extends" });
+    return relations;
+  }
+
+  if (!["typescript", "tsx", "javascript", "java"].includes(language)) return relations;
+  const extendsText = head.match(/\bextends\s+([^\s,{]+)/)?.[1];
+  if (extendsText !== undefined) {
+    const supertype = names(extendsText)[0];
+    if (supertype !== undefined) relations.push({ file, subtype, supertype, kind: "extends" });
+  }
+  const implementsText = head.match(/\bimplements\s+(.+)$/)?.[1] ?? "";
+  for (const supertype of names(implementsText)) {
+    relations.push({ file, subtype, supertype, kind: "implements" });
+  }
+  return relations;
 }
 
 function symbolId(
