@@ -108,12 +108,14 @@ kept fixed.
 | Native Code Intelligence calls | `0` | `35` | replaces shell discovery |
 | Shell discovery calls | `43` | `3` | **93.0% fewer** |
 | Total discovery operations | `43` | `38` | **11.6% fewer** |
-| Median full-turn time | `12.1 s` | `11.6 s` | **4.4% lower** |
+| Median full-turn time | `12.1 s` | `11.6 s` | within noise |
 
 So the demonstrated value is **structured native navigation without losing
 correctness**: on this fixed cross-language task set, the enabled arm made 40
-fewer shell-search calls, 5 fewer discovery operations, and had a 529 ms lower
-median full-turn time. Read the [method and per-language results](bench/results/2026-07-31-agent-value-v3.md),
+fewer shell-search calls and 5 fewer discovery operations. The pooled median
+full-turn time was 529 ms lower, but that gap reverses under other aggregations
+of the same runs, so it is reported as noise rather than a speed win. Read the
+[method and per-language results](bench/results/2026-07-31-agent-value-v3.md),
 [task contract](bench/tasks/agent-value-v2.json), and
 [raw rows](bench/results/2026-07-31-agent-value-v3.json) before drawing a
 broader conclusion. Individual task samples still vary, so these figures do
@@ -122,9 +124,9 @@ not claim a universal speed improvement. The prior cross-language
 [routing pilot](bench/results/2026-07-31-agent-routing-smoke-v1.md) remain as
 historical evidence.
 
-That A/B also found a concrete Java host-snapshot incompatibility: a familiar
-`*.java` glob did not reach nested source directories. The fixed, targeted
-[Java regression A/B](bench/results/2026-07-31-java-glob-regression-v1.md)
+The earlier v2 A/B found a concrete Java host-snapshot incompatibility: a
+familiar `*.java` glob did not reach nested source directories. The fixed,
+targeted [Java regression A/B](bench/results/2026-07-31-java-glob-regression-v1.md)
 kept correctness at `5 / 5` while eliminating shell discovery calls
 (`8 → 0`, **100% fewer**), reducing total discovery operations (`8 → 6`,
 **25% fewer**), and reducing median full-turn time (`11.7 s → 9.2 s`,
