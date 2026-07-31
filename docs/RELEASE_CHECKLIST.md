@@ -21,6 +21,8 @@ Run every item from a clean clone before tagging a release.
 - [ ] `npm run release:publish -- <version>`.
 - [ ] `gh release view v<version>` confirms a published, non-prerelease GitHub
   Release targeting the pushed release commit.
+- [ ] Confirm the publisher promotes `stable` to the peeled `v<version>` tag
+  commit with `git ls-remote --heads --tags origin stable v<version>`.
 
 GitHub Actions are not a release gate for this repository. Preserve the local
 command output or managed-install smoke-test notes with the release instead.

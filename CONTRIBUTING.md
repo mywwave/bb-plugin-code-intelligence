@@ -72,5 +72,7 @@ Only a maintainer publishes releases. Run `npm run release:prepare -- <version>`
 from a clean tree, review and commit the version, changelog, and generated
 `dist/` changes, then push `main`. After `npm run check` passes against that
 pushed commit, run `npm run release:publish -- <version>`. The publisher
-creates an annotated `v<version>` tag and a GitHub Release; it refuses to
-publish an unpushed, dirty, mismatched, or already tagged release.
+creates an annotated `v<version>` tag and a GitHub Release, then promotes the
+managed-install `stable` branch to that tag's commit. It refuses to publish an
+unpushed, dirty, mismatched, or already tagged release. If stable promotion
+fails, resolve the branch divergence before telling users an update is ready.

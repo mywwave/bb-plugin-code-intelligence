@@ -47,4 +47,17 @@ describe("contributor contract", () => {
       "Private Vulnerability Reporting",
     );
   });
+
+  it("publishes stable as the managed Git update channel", async () => {
+    const readme = await readRepositoryFile("README.md");
+    expect(readme).toContain(
+      "git:https://github.com/mywwave/bb-plugin-code-intelligence.git@stable",
+    );
+    expect(readme).not.toContain(
+      "git:https://github.com/mywwave/bb-plugin-code-intelligence.git@main",
+    );
+    await expect(readRepositoryFile("docs/RELEASE_CHECKLIST.md")).resolves.toContain(
+      "promotes `stable`",
+    );
+  });
 });

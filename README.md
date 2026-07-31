@@ -13,8 +13,8 @@ only a source you trust.
 # Enable the BB Plugins experiment once.
 bb settings experiment plugins true
 
-# Install the published, prebuilt release artifact.
-bb plugin install --yes git:https://github.com/mywwave/bb-plugin-code-intelligence.git@main
+# Install the published, prebuilt stable channel.
+bb plugin install --yes git:https://github.com/mywwave/bb-plugin-code-intelligence.git@stable
 
 # Confirm that it loaded.
 bb plugin list
@@ -29,7 +29,7 @@ Open **Plugins** → **Add plugin**, then paste this exact value into the
 installation field and select **Install plugin**:
 
 ```text
-git:https://github.com/mywwave/bb-plugin-code-intelligence.git@main
+git:https://github.com/mywwave/bb-plugin-code-intelligence.git@stable
 ```
 
 To verify graph indexing explicitly in a local checkout:
@@ -39,8 +39,12 @@ bb code-intelligence index /absolute/path/to/repository
 bb code-intelligence status
 ```
 
-For updates, run `bb plugin update code-intelligence`. For local development,
-use `bb plugin install .` after `npm ci`.
+BB never applies a third-party plugin update on its own. To check and apply a
+compatible stable update, use **Tools → Plugins → Code Intelligence → Check
+now → Update**, or run `bb plugin outdated` followed by
+`bb plugin update code-intelligence`. For local development, use
+`bb plugin install .` after `npm ci`; contributors who deliberately want
+unreleased commits may track the repository's `main` branch instead.
 
 ## What the agent gets
 
@@ -124,4 +128,5 @@ npm run release:publish -- 1.2.3
 ```
 
 `release:publish` refuses a dirty tree, an unpushed commit, a mismatched
-package version, or an existing tag. It does not require GitHub Actions.
+package version, or an existing tag. After the GitHub Release succeeds, it
+promotes `stable` to that release commit. It does not require GitHub Actions.
