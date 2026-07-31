@@ -511,7 +511,13 @@ export default async function plugin(bb: BbPluginApi) {
     signal?: AbortSignal,
   ): Promise<IndexedRoot<RetrievalIndex>> {
     const root = isRemoteRoot(inputRoot) ? inputRoot : resolvePath(inputRoot);
-    const ready = await indexes.ensure(root, () => rebuildIndex(root, undefined, signal));
+    // Do not bind a caller's AbortSignal into the coalesced build. Concurrent
+    // ensure() waiters share one promise; if the first caller's signal aborts,
+    // every waiter would fail even when their own requests are still live.
+    // Cancellation is checked around the shared work instead.
+    throwIfAborted(signal);
+    const ready = await indexes.ensure(root, () => rebuildIndex(root));
+    throwIfAborted(signal);
     await refreshRepositoryContext(ready);
     activeRoot = ready.root;
     return ready;

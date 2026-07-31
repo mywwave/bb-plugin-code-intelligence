@@ -123,6 +123,19 @@ function insertSorted<T>(values: T[], value: T, limit: number, compare: (left: T
   if (values.length > limit + 1) values.pop();
 }
 
+/**
+ * Agent-facing paths are always POSIX with a `./` prefix.
+ *
+ * Ripgrep on Windows emits backslashes (`.\src\a.ts`). The graph index and
+ * remote host-file search already use forward slashes, so leaving the local
+ * engine raw made exact hits unmatchable against symbols, broke feedback
+ * recall, and failed the public path contract on every Windows host.
+ */
+export function normalizeInstantGrepFile(file: string): string {
+  const posix = file.replace(/\\/g, "/");
+  return posix.startsWith("./") ? posix : `./${posix}`;
+}
+
 function collectNullRecords(
   root: string,
   args: readonly string[],
@@ -149,7 +162,9 @@ function collectNullRecords(
       while ((boundary = buffer.indexOf("\0")) >= 0) {
         const record = buffer.slice(0, boundary);
         buffer = buffer.slice(boundary + 1);
-        if (record !== "") insertSorted(records, record, limit, (left, right) => left.localeCompare(right));
+        if (record !== "") {
+          insertSorted(records, normalizeInstantGrepFile(record), limit, (left, right) => left.localeCompare(right));
+        }
       }
     });
     child.stderr.setEncoding("utf8");
@@ -191,7 +206,12 @@ function collectCountRecords(
     const record = (file: string, countText: string) => {
       const count = Number(countText);
       if (!Number.isInteger(count)) return;
-      insertSorted(counts, { file, count }, limit, (left, right) => left.file.localeCompare(right.file));
+      insertSorted(
+        counts,
+        { file: normalizeInstantGrepFile(file), count },
+        limit,
+        (left, right) => left.file.localeCompare(right.file),
+      );
     };
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (chunk: string) => {
@@ -285,7 +305,11 @@ function streamContentSearch(root: string, options: InstantGrepOptions, limit: n
         skipped++;
         return;
       }
-      matches.push({ file, line: lineNumber, text: text.replace(/\r?\n$/, "") });
+      matches.push({
+        file: normalizeInstantGrepFile(file),
+        line: lineNumber,
+        text: text.replace(/\r?\n$/, ""),
+      });
       if (matches.length >= limit) abort();
     };
     child.stdout.setEncoding("utf8");
@@ -383,10 +407,6 @@ function sourceMatcher(options: InstantGrepOptions): (line: string) => boolean {
   return (line) => wordExpression.test(line);
 }
 
-function displaySourceFile(file: string): string {
-  return file.startsWith("./") ? file : `./${file}`;
-}
-
 /**
  * Exact search over sources read through the BB host API.
  *
@@ -416,16 +436,16 @@ export async function instantGrepSources(
     const lineIndexes = lines.flatMap((line, index) => matchesLine(line) ? [index] : []);
     if (lineIndexes.length === 0) continue;
     if ((options.outputMode ?? "content") === "files_with_matches") {
-      files.push(displaySourceFile(file));
+      files.push(normalizeInstantGrepFile(file));
       continue;
     }
     if (options.outputMode === "count") {
-      counts.push({ file: displaySourceFile(file), count: lineIndexes.length });
+      counts.push({ file: normalizeInstantGrepFile(file), count: lineIndexes.length });
       continue;
     }
     for (const index of lineIndexes) {
       candidates.push({
-        file: displaySourceFile(file),
+        file: normalizeInstantGrepFile(file),
         line: index + 1,
         text: lines[index]!,
         ...(beforeCount > 0 ? {

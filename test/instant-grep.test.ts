@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { buildInstantGrepArgs, instantGrep, instantGrepBatch, instantGrepSources } from "../src/instant-grep.js";
+import { buildInstantGrepArgs, instantGrep, instantGrepBatch, instantGrepSources, normalizeInstantGrepFile } from "../src/instant-grep.js";
 
 const temporaryRoots: string[] = [];
 
@@ -73,6 +73,13 @@ describe("instantGrep", () => {
     expect(() => buildInstantGrepArgs({ pattern: "x", glob: "--hidden" })).toThrow(
       "glob must not begin with '-'",
     );
+  });
+
+  it("normalizes Windows ripgrep paths to the POSIX agent-facing contract", () => {
+    expect(normalizeInstantGrepFile(".\\payment.ts")).toBe("./payment.ts");
+    expect(normalizeInstantGrepFile("src\\payment\\handler.ts")).toBe("./src/payment/handler.ts");
+    expect(normalizeInstantGrepFile("./already/posix.ts")).toBe("./already/posix.ts");
+    expect(normalizeInstantGrepFile("plain.ts")).toBe("./plain.ts");
   });
 
   it("returns surrounding lines and a deterministic next offset for content pages", async () => {
