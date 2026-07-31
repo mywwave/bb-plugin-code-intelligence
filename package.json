@@ -56,7 +56,8 @@
     "build:plugin": "NODE_PATH=./node_modules bb plugin build . && node scripts/copy-tree-sitter-assets.js",
     "verify:release": "npm run verify && npm run build:plugin && node scripts/verify-release.js && node scripts/verify-clean-dist.js",
     "install-git-hooks": "node scripts/install-git-hooks.js",
-    "release:prepare": "node scripts/prepare-release.js"
+    "release:prepare": "node scripts/prepare-release.js",
+    "release:publish": "node scripts/publish-release.js"
   },
   "keywords": [
     "bb-plugin",
