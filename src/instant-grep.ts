@@ -12,6 +12,12 @@ import { join } from "node:path";
 
 export type InstantGrepOutputMode = "content" | "files_with_matches" | "count";
 
+/**
+ * Enough to return a moderately sized declaration in one response while
+ * retaining a bounded result page even when several patterns are batched.
+ */
+export const MAX_CONTEXT_LINES = 32;
+
 export interface InstantGrepOptions {
   readonly pattern: string;
   /** False treats pattern as literal text; true uses ripgrep's Rust regex syntax. */
@@ -100,8 +106,8 @@ function validateOptions(options: InstantGrepOptions): void {
   if (options.glob?.startsWith("-")) throw new Error("glob must not begin with '-'");
   normalizedLimit(options.limit);
   normalizedNonNegative(options.offset, "offset", 100_000);
-  normalizedNonNegative(options.beforeContext, "beforeContext", 20);
-  normalizedNonNegative(options.afterContext, "afterContext", 20);
+  normalizedNonNegative(options.beforeContext, "beforeContext", MAX_CONTEXT_LINES);
+  normalizedNonNegative(options.afterContext, "afterContext", MAX_CONTEXT_LINES);
 }
 
 function searchFlags(options: InstantGrepOptions): string[] {
@@ -347,7 +353,7 @@ async function contentSearch(root: string, options: InstantGrepOptions): Promise
   const limit = normalizedLimit(options.limit);
   const offset = normalizedNonNegative(options.offset, "offset", 100_000);
   const page = await streamContentSearch(root, options, limit, offset);
-  const matches = await attachContext(root, page.matches, normalizedNonNegative(options.beforeContext, "beforeContext", 20), normalizedNonNegative(options.afterContext, "afterContext", 20));
+  const matches = await attachContext(root, page.matches, normalizedNonNegative(options.beforeContext, "beforeContext", MAX_CONTEXT_LINES), normalizedNonNegative(options.afterContext, "afterContext", MAX_CONTEXT_LINES));
   return {
     matches,
     truncated: page.truncated,
@@ -454,8 +460,8 @@ export async function instantGrepPreparedSources(
   validateOptions(options);
   const limit = normalizedLimit(options.limit);
   const offset = normalizedNonNegative(options.offset, "offset", 100_000);
-  const beforeCount = normalizedNonNegative(options.beforeContext, "beforeContext", 20);
-  const afterCount = normalizedNonNegative(options.afterContext, "afterContext", 20);
+  const beforeCount = normalizedNonNegative(options.beforeContext, "beforeContext", MAX_CONTEXT_LINES);
+  const afterCount = normalizedNonNegative(options.afterContext, "afterContext", MAX_CONTEXT_LINES);
   const matchesLine = sourceMatcher(options);
   const files: string[] = [];
   const counts: InstantGrepCount[] = [];

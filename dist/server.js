@@ -16639,6 +16639,7 @@ function analyzeImpact(index, requested) {
 import { spawn } from "node:child_process";
 import { readFile as readFile2 } from "node:fs/promises";
 import { join as join2 } from "node:path";
+var MAX_CONTEXT_LINES = 32;
 function normalizedLimit(value) {
   if (value === void 0) return 30;
   if (!Number.isInteger(value) || value < 1 || value > 500) {
@@ -16658,8 +16659,8 @@ function validateOptions(options) {
   if (options.glob?.startsWith("-")) throw new Error("glob must not begin with '-'");
   normalizedLimit(options.limit);
   normalizedNonNegative(options.offset, "offset", 1e5);
-  normalizedNonNegative(options.beforeContext, "beforeContext", 20);
-  normalizedNonNegative(options.afterContext, "afterContext", 20);
+  normalizedNonNegative(options.beforeContext, "beforeContext", MAX_CONTEXT_LINES);
+  normalizedNonNegative(options.afterContext, "afterContext", MAX_CONTEXT_LINES);
 }
 function searchFlags(options) {
   const args = [];
@@ -16885,7 +16886,7 @@ async function contentSearch(root, options) {
   const limit = normalizedLimit(options.limit);
   const offset = normalizedNonNegative(options.offset, "offset", 1e5);
   const page = await streamContentSearch(root, options, limit, offset);
-  const matches = await attachContext(root, page.matches, normalizedNonNegative(options.beforeContext, "beforeContext", 20), normalizedNonNegative(options.afterContext, "afterContext", 20));
+  const matches = await attachContext(root, page.matches, normalizedNonNegative(options.beforeContext, "beforeContext", MAX_CONTEXT_LINES), normalizedNonNegative(options.afterContext, "afterContext", MAX_CONTEXT_LINES));
   return {
     matches,
     truncated: page.truncated,
@@ -16952,8 +16953,8 @@ async function instantGrepPreparedSources(sources, options) {
   validateOptions(options);
   const limit = normalizedLimit(options.limit);
   const offset = normalizedNonNegative(options.offset, "offset", 1e5);
-  const beforeCount = normalizedNonNegative(options.beforeContext, "beforeContext", 20);
-  const afterCount = normalizedNonNegative(options.afterContext, "afterContext", 20);
+  const beforeCount = normalizedNonNegative(options.beforeContext, "beforeContext", MAX_CONTEXT_LINES);
+  const afterCount = normalizedNonNegative(options.afterContext, "afterContext", MAX_CONTEXT_LINES);
   const matchesLine = sourceMatcher(options);
   const files = [];
   const counts = [];
@@ -17051,13 +17052,19 @@ function buildCodebaseQueryPatterns(query) {
   const natural = unique(tokenizeIdentifiers(withoutExplicit).filter((term) => !NATURAL_LANGUAGE_NOISE.has(term))).sort((left, right) => right.length - left.length);
   return [...explicit, ...natural].slice(0, MAX_PATTERNS);
 }
-function traceAnchor(candidates) {
+function traceTarget(candidates) {
   const first = candidates[0];
   if (first === void 0) return void 0;
   const signature = first.match(/(?:^|[.:])([A-Za-z_$][A-Za-z0-9_$]*)\s*\(/);
-  if (signature?.[1] !== void 0) return signature[1];
-  const qualified = first.match(/(?:::\s*|\.)([A-Za-z_$][A-Za-z0-9_$]*)$/);
-  return qualified?.[1] ?? first;
+  const qualifiedPath = first.match(/([A-Za-z_$][A-Za-z0-9_$]*(?:(?:::|\.)[A-Za-z_$][A-Za-z0-9_$]*)+)\s*(?:\(|$)/)?.[1];
+  if (qualifiedPath !== void 0) {
+    const parts = qualifiedPath.split(/::|\./);
+    const anchor = parts.at(-1);
+    const owner = parts.at(-2);
+    if (anchor !== void 0) return owner === void 0 ? { anchor } : { anchor, owner };
+  }
+  if (signature?.[1] !== void 0) return { anchor: signature[1] };
+  return { anchor: first };
 }
 function matchIndexFile(file2) {
   return file2.replace(/\\/g, "/").replace(/^\.\//, "");
@@ -17081,7 +17088,17 @@ function uniqueRelations(relations) {
     return true;
   });
 }
-function candidateTraceNodes(index, matches, anchor) {
+function candidateTraceNodes(index, matches, target) {
+  const anchor = target?.anchor;
+  const nameMatches = (node) => anchor !== void 0 && index.symbols[node].name === anchor;
+  const ownerMatches = (node) => target?.owner !== void 0 && index.symbols[node].container === target.owner;
+  if (target?.owner !== void 0) {
+    const owned = /* @__PURE__ */ new Set();
+    for (const node of index.symbols.keys()) {
+      if (nameMatches(node) && ownerMatches(node)) owned.add(node);
+    }
+    if (owned.size > 0) return [...owned];
+  }
   const named = /* @__PURE__ */ new Set();
   for (const match of matches) {
     for (const node of index.nodesByFile.get(matchIndexFile(match.file)) ?? []) {
@@ -17104,9 +17121,9 @@ function candidateTraceNodes(index, matches, anchor) {
   }
   return [...containing];
 }
-function directTrace(index, matches, anchor) {
+function directTrace(index, matches, target) {
   const symbols = [];
-  for (const node of candidateTraceNodes(index, matches, anchor).slice(0, 3)) {
+  for (const node of candidateTraceNodes(index, matches, target).slice(0, 3)) {
     const symbol2 = index.symbols[node];
     symbols.push({
       id: symbol2.id,
@@ -17129,7 +17146,8 @@ async function queryCodebase(root, index, options) {
   const startedAt = performance.now();
   const mode = options.mode ?? "explore";
   const candidates = buildCodebaseQueryPatterns(options.query);
-  const patterns = mode === "trace" ? [traceAnchor(candidates)].filter((pattern) => pattern !== void 0) : candidates;
+  const target = mode === "trace" ? traceTarget(candidates) : void 0;
+  const patterns = target === void 0 ? mode === "trace" ? [] : candidates : [target.anchor];
   const exactStartedAt = performance.now();
   const exactPromise = patterns.length === 0 ? Promise.resolve([]) : (options.search ?? ((searchOptions) => instantGrepBatch(root, searchOptions)))(patterns.map((pattern) => ({
     pattern,
@@ -17162,7 +17180,7 @@ async function queryCodebase(root, index, options) {
   });
   const exactMatches = exact.flatMap((result) => result.matches.map((match) => ({ pattern: result.pattern, ...match })));
   const graphStartedAt = performance.now();
-  const trace = directTrace(index, exactMatches, patterns[0]);
+  const trace = directTrace(index, exactMatches, target);
   const graphMs = performance.now() - graphStartedAt;
   return {
     query: options.query,
@@ -18542,8 +18560,8 @@ async function plugin(bb) {
       limit: external_exports.number().int().min(1).max(500).default(30).describe("Maximum matching lines returned."),
       offset: external_exports.number().int().min(0).max(1e5).default(0).describe("Content-match offset for the next page."),
       outputMode: external_exports.enum(["content", "files_with_matches", "count"]).default("content").describe("Return matching lines, matching files, or per-file counts."),
-      beforeContext: external_exports.number().int().min(0).max(20).default(0).describe("Source lines before every content match."),
-      afterContext: external_exports.number().int().min(0).max(20).default(0).describe("Source lines after every content match."),
+      beforeContext: external_exports.number().int().min(0).max(MAX_CONTEXT_LINES).default(0).describe("Source lines before every content match (at most 32)."),
+      afterContext: external_exports.number().int().min(0).max(MAX_CONTEXT_LINES).default(0).describe("Source lines after every content match (at most 32)."),
       root: external_exports.string().optional().describe("Explicit server-local root. Omit to use the current thread workspace, including a remote environment.")
     }).refine(({ pattern, patterns }) => pattern === void 0 !== (patterns === void 0), {
       message: "Pass exactly one of pattern or patterns."

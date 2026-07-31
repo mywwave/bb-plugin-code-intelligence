@@ -78,6 +78,40 @@ describe("codebase query", () => {
     expect(result.exactMatches.every((match) => match.file === "./src/gson.java")).toBe(true);
   });
 
+  it("uses the owner in a fully qualified Rust method path to avoid generic constructor traces", async () => {
+    const root = await fixture({
+      "src/chain.rs": "impl Chain { pub fn new() -> Self { Self } }\n",
+      "src/error.rs": "impl Error { pub fn new<E>(error: E) -> Self { Self::construct_from_std(error) } }\n",
+      "src/ensure.rs": "impl Buf { pub fn new() -> Self { Self } }\n",
+    });
+    const chainNew = { ...symbol("src/chain.rs#Chain.new", "new", "src/chain.rs", "unrelated"), kind: "method" as const, container: "Chain" };
+    const errorNew = { ...symbol("src/error.rs#Error.new", "new", "src/error.rs", "construct_from_std"), kind: "method" as const, container: "Error" };
+    const construct = { ...symbol("src/error.rs#Error.construct_from_std", "construct_from_std", "src/error.rs", "construct"), kind: "method" as const, container: "Error" };
+    const bufNew = { ...symbol("src/ensure.rs#Buf.new", "new", "src/ensure.rs", "unrelated"), kind: "method" as const, container: "Buf" };
+    const symbols = [chainNew, errorNew, construct, bufNew];
+    const bodies = new Map(symbols.map((entry) => [entry.id, entry.body]));
+    const index = buildIndex({
+      symbols,
+      edges: [{ from: errorNew.id, to: construct.id, weight: 1, strategy: "uniqueName" }],
+      ambiguousCalls: 0,
+    } satisfies IndexInput, (entry) => bodies.get(entry.id) ?? "", 0.8, true);
+
+    const result = await queryCodebase(root, index, {
+      query: "Trace `anyhow::Error::new` and its direct delegation.",
+      mode: "trace",
+      budgetTokens: 160,
+    });
+
+    expect(result.patterns).toEqual(["new"]);
+    expect(result.trace?.symbols).toEqual([
+      expect.objectContaining({
+        id: errorNew.id,
+        callees: [expect.objectContaining({ id: construct.id })],
+      }),
+    ]);
+    expect(result.exactMatches.every((match) => match.file === "./src/error.rs")).toBe(true);
+  });
+
   it("returns both exact disk hits and graph-ranked entry points", async () => {
     const root = await fixture({
       "src/payment/error.ts": "export class PaymentFailedError extends Error {}\n",

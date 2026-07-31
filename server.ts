@@ -35,6 +35,7 @@ import { analyzeImpact } from "./src/impact.js";
 import {
   instantGrepBatch,
   instantGrepPreparedSources,
+  MAX_CONTEXT_LINES,
   prepareInstantGrepSources,
   type InstantGrepOptions,
   type PreparedInstantGrepSource,
@@ -744,8 +745,8 @@ export default async function plugin(bb: BbPluginApi) {
       limit: z.number().int().min(1).max(500).default(30).describe("Maximum matching lines returned."),
       offset: z.number().int().min(0).max(100_000).default(0).describe("Content-match offset for the next page."),
       outputMode: z.enum(["content", "files_with_matches", "count"]).default("content").describe("Return matching lines, matching files, or per-file counts."),
-      beforeContext: z.number().int().min(0).max(20).default(0).describe("Source lines before every content match."),
-      afterContext: z.number().int().min(0).max(20).default(0).describe("Source lines after every content match."),
+      beforeContext: z.number().int().min(0).max(MAX_CONTEXT_LINES).default(0).describe("Source lines before every content match (at most 32)."),
+      afterContext: z.number().int().min(0).max(MAX_CONTEXT_LINES).default(0).describe("Source lines after every content match (at most 32)."),
       root: z.string().optional().describe("Explicit server-local root. Omit to use the current thread workspace, including a remote environment."),
     }).refine(({ pattern, patterns }) => (pattern === undefined) !== (patterns === undefined), {
       message: "Pass exactly one of pattern or patterns.",

@@ -57,3 +57,13 @@ defined in [`bench/tasks/agent-value-v2.json`](../bench/tasks/agent-value-v2.jso
 and publishes its [v3 raw result rows and aggregate report](../bench/results/2026-07-31-agent-value-v3.md)
 under the same results directory. Neither is a statistically general performance
 claim.
+
+The separate [`agent-value-v4` contract](../bench/tasks/agent-value-v4.json)
+preserves those fixture commits while adding multi-hop navigation prompts and
+event-timeline diagnostics. Its `item/started` → `item/completed` intervals are
+only an observation of BB event timing. They are not CPU samples, do not expose
+hidden reasoning text, and cannot establish that a particular tool caused a
+full-turn delay. A missing, duplicate, mismatched, or non-monotonic lifecycle
+pair invalidates every duration field for that run rather than producing a
+guessed value. Use v4 to select a single plugin-only optimization after a
+controlled run; do not retroactively reinterpret v2/v3 evidence with it.
