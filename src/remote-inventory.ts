@@ -46,6 +46,30 @@ export function formatRemoteInventory(inventory: RemoteInventory): string {
 }
 
 /**
+ * Inventory gaps are separate from graph-analysis limits: an omitted remote
+ * file can make an otherwise exact search or static relation appear absent.
+ */
+export function remoteInventoryBlindSpots(inventory: RemoteInventory | undefined): readonly string[] {
+  if (inventory === undefined) return [];
+  const limits: string[] = [];
+  if (inventory.truncated) {
+    limits.push(
+      `The remote host listing was truncated after ${inventory.enumerated} paths; ` +
+      "unenumerated paths are unknown, so an absent match, symbol, or caller is inconclusive.",
+    );
+  }
+  const excludedContent = inventory.skipped.tooLarge + inventory.skipped.nonUtf8;
+  if (excludedContent > 0) {
+    limits.push(
+      `The remote snapshot excluded ${excludedContent} readable files ` +
+      `(tooLarge=${inventory.skipped.tooLarge}, nonUtf8=${inventory.skipped.nonUtf8}); ` +
+      "an absent match, symbol, or caller may be in excluded content.",
+    );
+  }
+  return limits;
+}
+
+/**
  * Reads host-file content while retaining a reason for every enumerated path
  * that cannot enter the searchable snapshot. A truncated host listing is not
  * treated as a complete repository inventory.
@@ -82,8 +106,11 @@ export async function collectRemoteSources(
           continue;
         }
         sources.set(path, file.content);
-      } catch {
-        skipped.unreadable++;
+      } catch (error) {
+        // A host-file read failure must not replace a last known-good remote
+        // snapshot with a partial one. In particular, propagate cancellation
+        // rather than misreporting it as an unreadable source file.
+        throw error;
       }
     }
   };

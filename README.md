@@ -150,10 +150,12 @@ runtime dispatch, and unparsed languages remain explicit blind spots. The
 plugin does not intercept or prohibit arbitrary terminal searches.
 
 For a remote BB workspace, `bb code-intelligence status` reports the number of
-host paths indexed and every enumerated skip reason (`ignored`, `excluded`,
-`tooLarge`, `nonUtf8`, or `unreadable`). If the host inventory is truncated,
-the remaining paths are explicitly unknown; the plugin never substitutes a
-same-named server-local checkout.
+host paths indexed and every successful-snapshot policy exclusion (`ignored`,
+`excluded`, `tooLarge`, or `nonUtf8`). A host-file read failure is fail-closed:
+it preserves the last known-good snapshot rather than serving a degraded one.
+If the host inventory is truncated, the remaining paths are explicitly unknown
+and every agent-facing absence-sensitive result carries that limit; the plugin
+never substitutes a same-named server-local checkout.
 
 `trace` reports only direct edges found in the static index. An empty trace is
 not proof that a runtime relation does not exist.

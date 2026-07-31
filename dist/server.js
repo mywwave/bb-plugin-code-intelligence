@@ -17735,6 +17735,22 @@ function formatRemoteInventory(inventory) {
   const { skipped } = inventory;
   return `remote inventory: indexed ${inventory.indexed}/${inventory.enumerated} enumerated; skipped ignored=${skipped.ignored}, excluded=${skipped.excluded}, tooLarge=${skipped.tooLarge}, nonUtf8=${skipped.nonUtf8}, unreadable=${skipped.unreadable}` + (inventory.truncated ? "; host listing truncated, remaining paths unknown" : "");
 }
+function remoteInventoryBlindSpots(inventory) {
+  if (inventory === void 0) return [];
+  const limits = [];
+  if (inventory.truncated) {
+    limits.push(
+      `The remote host listing was truncated after ${inventory.enumerated} paths; unenumerated paths are unknown, so an absent match, symbol, or caller is inconclusive.`
+    );
+  }
+  const excludedContent = inventory.skipped.tooLarge + inventory.skipped.nonUtf8;
+  if (excludedContent > 0) {
+    limits.push(
+      `The remote snapshot excluded ${excludedContent} readable files (tooLarge=${inventory.skipped.tooLarge}, nonUtf8=${inventory.skipped.nonUtf8}); an absent match, symbol, or caller may be in excluded content.`
+    );
+  }
+  return limits;
+}
 async function collectRemoteSources(options) {
   const paths = [...options.paths].sort((left, right) => left.localeCompare(right));
   const skipped = { ignored: 0, excluded: 0, tooLarge: 0, nonUtf8: 0, unreadable: 0 };
@@ -17764,8 +17780,8 @@ async function collectRemoteSources(options) {
           continue;
         }
         sources.set(path, file2.content);
-      } catch {
-        skipped.unreadable++;
+      } catch (error51) {
+        throw error51;
       }
     }
   };
@@ -18225,6 +18241,7 @@ async function plugin(bb) {
   };
   const rootLabel = (root) => remoteWorkspaces.get(root)?.path ?? root;
   const isRemoteRoot = (root) => remoteWorkspaces.has(root);
+  const inventoryLimits = (root) => remoteInventoryBlindSpots(remoteInventories.get(root));
   async function readRemoteRepositoryState(root, signal) {
     const workspace = remoteWorkspaces.get(root);
     if (workspace === void 0) throw new Error(`remote workspace is unavailable: ${root}`);
@@ -18654,7 +18671,7 @@ async function plugin(bb) {
         }
         const next = (result) => result.truncated ? "Refine pattern/glob or call again with nextOffset before treating this search as exhaustive." : outputMode === "content" ? "For a pure location/existence answer, cite this exact hit directly. Use code_graph_context only for structural questions." : "Use content mode on a selected file only when you need source lines.";
         return JSON.stringify(
-          searchPatterns.length === 1 ? { engine: isRemoteRoot(root) ? "BB host-file snapshot" : "ripgrep", root: rootLabel(root), mode: regex ? "regex" : "literal", outputMode, ...results[0], next: next(results[0]) } : { engine: isRemoteRoot(root) ? "BB host-file snapshot" : "ripgrep", root: rootLabel(root), outputMode, results, next: "Each result is independent; answer from exact hits or narrow only the query that needs it." },
+          searchPatterns.length === 1 ? { engine: isRemoteRoot(root) ? "BB host-file snapshot" : "ripgrep", root: rootLabel(root), mode: regex ? "regex" : "literal", outputMode, ...results[0], inventoryLimits: inventoryLimits(root), next: next(results[0]) } : { engine: isRemoteRoot(root) ? "BB host-file snapshot" : "ripgrep", root: rootLabel(root), outputMode, results, inventoryLimits: inventoryLimits(root), next: "Each result is independent; answer from exact hits or narrow only the query that needs it." },
           null,
           2
         );
@@ -18732,6 +18749,7 @@ async function plugin(bb) {
           ...context === void 0 ? {} : { graphFiles: context.files.slice(0, 12) },
           ...trace === void 0 ? {} : { trace: trace.symbols },
           graphCompleteness: ready.index.graphCompletenessReliable ? `>= ${(ready.index.graphCompleteness * 100).toFixed(0)}%` : "not estimable \u2014 too few edges were found by more than one strategy",
+          inventoryLimits: inventoryLimits(ready.root),
           timingMs: { index: indexMs, ...result.timingMs },
           next: result.mode === "trace" ? trace?.symbols.length === 0 ? "No indexed definition enclosed an exact hit. Refine the identifier or use instant_grep; an empty trace is not proof of no relation." : "The exact definition and direct relation above answer this trace. Answer now; do not call instant_grep or code_graph_context unless the user asks for source beyond this result or a wider structure." : "Choose an exact hit or symbol from this response. Use instant_grep for a narrower exact follow-up, then symbol_lookup or code_graph_context for structure."
         }, null, 2);
@@ -18864,6 +18882,7 @@ async function plugin(bb) {
           staleness: staleness.get(ready.root) ?? null,
           graphCompleteness: ready.index.graphCompletenessReliable ? `>= ${(ready.index.graphCompleteness * 100).toFixed(0)}%` : "not estimable \u2014 too few edges were found by more than one strategy",
           ambiguousCalls: ready.index.ambiguousCalls,
+          inventoryLimits: inventoryLimits(ready.root),
           note: "graphCompleteness is a lower bound from capture-recapture over resolution strategies. Reflection, dynamic dispatch and DI containers are invisible to static analysis and are not counted at all." + (config2.includeSnippets ? " Snippets are truncated bodies \u2014 open the file only when you need lines beyond them." : "")
         },
         null,
@@ -18926,6 +18945,7 @@ async function plugin(bb) {
           ...report,
           graphCompleteness: ready.index.graphCompletenessReliable ? `>= ${(ready.index.graphCompleteness * 100).toFixed(0)}% of call edges (lower bound)` : "not estimable \u2014 too few overlapping resolution strategies",
           ambiguousCalls: ready.index.ambiguousCalls,
+          inventoryLimits: inventoryLimits(ready.root),
           note: "Direct static references only. Reflection, dynamic dispatch, DI, generated code, and unparsed languages are outside the graph.",
           next: report.ambiguous.length > 0 ? "Choose an exact symbol id or source-file path, then call again." : "Use prechange_impact before editing a resolved implementation target."
         }, null, 2);
@@ -19025,7 +19045,8 @@ async function plugin(bb) {
               "A missing caller is inconclusive: reflection, dynamic dispatch, DI, generated code, and unparsed languages are outside the static graph.",
               "Production imports are static dependency evidence, not proof that a target is called at runtime.",
               "A test reference means the test calls or imports a target; it is evidence, not proof of behavioural coverage.",
-              "Dynamic boundaries are detected inside target bodies only; they do not enumerate every runtime dispatch site in the repository."
+              "Dynamic boundaries are detected inside target bodies only; they do not enumerate every runtime dispatch site in the repository.",
+              ...inventoryLimits(ready.root)
             ]
           },
           requiredReview: [
@@ -19091,6 +19112,7 @@ async function plugin(bb) {
           verification,
           blindSpots: {
             graphCompleteness: ready.index.graphCompletenessReliable ? `>= ${(ready.index.graphCompleteness * 100).toFixed(0)}% of call edges (lower bound)` : "not estimable \u2014 too few overlapping resolution strategies",
+            inventoryLimits: inventoryLimits(ready.root),
             notProven: "Passing declared checks does not prove reflection, dynamic dispatch, DI, generated code, or unparsed languages are safe."
           }
         }, null, 2);
