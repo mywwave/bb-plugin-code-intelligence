@@ -12,7 +12,18 @@ import { createRequire } from "node:module";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export type LanguageId = "typescript" | "tsx" | "javascript" | "python";
+export type LanguageId =
+  | "typescript"
+  | "tsx"
+  | "javascript"
+  | "python"
+  | "go"
+  | "rust"
+  | "c"
+  | "cpp"
+  | "java";
+
+export type GrammarId = Exclude<LanguageId, "c">;
 
 export interface LoadedLanguage {
   readonly id: LanguageId;
@@ -47,7 +58,28 @@ const EXTENSION_TO_LANGUAGE: ReadonlyMap<string, LanguageId> = new Map([
   [".jsx", "javascript"],
   [".py", "python"],
   [".pyi", "python"],
+  [".go", "go"],
+  [".rs", "rust"],
+  [".c", "c"],
+  [".h", "c"],
+  [".cc", "cpp"],
+  [".cp", "cpp"],
+  [".cpp", "cpp"],
+  [".cxx", "cpp"],
+  [".hpp", "cpp"],
+  [".hh", "cpp"],
+  [".hxx", "cpp"],
+  [".java", "java"],
 ]);
+
+/**
+ * The bundled WASM package has a C++ grammar but no separate C grammar.
+ * Its C-family grammar parses the supported C baseline without errors, so C
+ * intentionally uses that asset rather than shipping an ABI-mismatched addon.
+ */
+export function grammarForLanguage(id: LanguageId): GrammarId {
+  return id === "c" ? "cpp" : id;
+}
 
 export function languageForPath(path: string): LanguageId | null {
   const dot = path.lastIndexOf(".");
@@ -115,7 +147,7 @@ export function loadLanguage(id: LanguageId): Promise<LoadedLanguage> {
 
   const created = (async (): Promise<LoadedLanguage> => {
     const { Parser, Language, dir } = await loadRuntime();
-    const grammar = await Language.load(`${dir}/tree-sitter-${id}.wasm`);
+    const grammar = await Language.load(`${dir}/tree-sitter-${grammarForLanguage(id)}.wasm`);
     const parser = new Parser();
     parser.setLanguage(grammar);
     return { id, parser: parser as WasmParser };

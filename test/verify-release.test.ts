@@ -9,6 +9,7 @@ async function fixture(options?: {
   pluginId?: string;
   version?: string;
   treeSitterAssets?: boolean;
+  omittedTreeSitterAsset?: string;
   app?: boolean;
 }) {
   const root = await mkdtemp(join(tmpdir(), "code-intelligence-release-"));
@@ -32,7 +33,12 @@ async function fixture(options?: {
       "tree-sitter-tsx.wasm",
       "tree-sitter-javascript.wasm",
       "tree-sitter-python.wasm",
+      "tree-sitter-go.wasm",
+      "tree-sitter-rust.wasm",
+      "tree-sitter-cpp.wasm",
+      "tree-sitter-java.wasm",
     ]) {
+      if (name === options?.omittedTreeSitterAsset) continue;
       await writeFile(join(assets, name), "asset");
     }
   }
@@ -66,5 +72,11 @@ describe("validateReleaseArtifacts", () => {
     await expect(
       validateReleaseArtifacts(await fixture({ treeSitterAssets: false })),
     ).rejects.toThrow("missing release artifact");
+  });
+
+  it("rejects a build that omits a core language grammar", async () => {
+    await expect(
+      validateReleaseArtifacts(await fixture({ omittedTreeSitterAsset: "tree-sitter-go.wasm" })),
+    ).rejects.toThrow("tree-sitter-go.wasm");
   });
 });

@@ -37,8 +37,9 @@ path structured, host-aware, and measurable.
 The following checks are reproducible in this repository and documented in
 [VALIDATION.md](VALIDATION.md):
 
-- 163 automated tests across exact search, retrieval, indexing, project-path
-  routing, persistence, impact analysis, and release metadata;
+- the current automated suite (`npm test`) across exact search, retrieval,
+  indexing, project-path routing, persistence, impact analysis, language
+  profiles, and release metadata;
 - strict TypeScript checking and a repeatable release gate;
 - a clean isolated BB `0.34.0` path install with a running plugin and
   `bb code-intelligence` command;

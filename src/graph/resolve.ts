@@ -378,6 +378,19 @@ const SOURCE_EXTENSIONS = [
   ".mjs",
   ".cjs",
   ".py",
+  ".pyi",
+  ".go",
+  ".rs",
+  ".c",
+  ".h",
+  ".cc",
+  ".cp",
+  ".cpp",
+  ".cxx",
+  ".hpp",
+  ".hh",
+  ".hxx",
+  ".java",
 ];
 
 /**

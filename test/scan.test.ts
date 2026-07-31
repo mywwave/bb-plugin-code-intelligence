@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import { grammarForLanguage, languageForPath } from "../src/graph/languages.js";
 import { listRepositorySourceFiles } from "../src/graph/scan.js";
 
 const temporaryRoots: string[] = [];
@@ -13,6 +14,15 @@ afterEach(async () => {
 });
 
 describe("listRepositorySourceFiles", () => {
+  it("maps core language extensions to their parser profiles", () => {
+    expect(languageForPath("internal/service.go")).toBe("go");
+    expect(languageForPath("src/main.rs")).toBe("rust");
+    expect(languageForPath("native/math.c")).toBe("c");
+    expect(languageForPath("native/math.hpp")).toBe("cpp");
+    expect(languageForPath("app/Service.java")).toBe("java");
+    expect(grammarForLanguage("c")).toBe("cpp");
+  });
+
   it("lists every supported non-ignored file without parsing it", async () => {
     const root = await mkdtemp(join(tmpdir(), "codegraph-scan-"));
     temporaryRoots.push(root);

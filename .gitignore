@@ -3,5 +3,6 @@ node_modules/
 .playwright-cli/
 .DS_Store
 coverage/
+docs/superpowers/
 .env
 .env.*

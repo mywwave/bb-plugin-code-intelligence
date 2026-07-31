@@ -15097,8 +15097,23 @@ var EXTENSION_TO_LANGUAGE = /* @__PURE__ */ new Map([
   [".cjs", "javascript"],
   [".jsx", "javascript"],
   [".py", "python"],
-  [".pyi", "python"]
+  [".pyi", "python"],
+  [".go", "go"],
+  [".rs", "rust"],
+  [".c", "c"],
+  [".h", "c"],
+  [".cc", "cpp"],
+  [".cp", "cpp"],
+  [".cpp", "cpp"],
+  [".cxx", "cpp"],
+  [".hpp", "cpp"],
+  [".hh", "cpp"],
+  [".hxx", "cpp"],
+  [".java", "java"]
 ]);
+function grammarForLanguage(id) {
+  return id === "c" ? "cpp" : id;
+}
 function languageForPath(path) {
   const dot = path.lastIndexOf(".");
   if (dot < 0) return null;
@@ -15136,7 +15151,7 @@ function loadLanguage(id) {
   if (existing !== void 0) return existing;
   const created = (async () => {
     const { Parser, Language, dir } = await loadRuntime();
-    const grammar = await Language.load(`${dir}/tree-sitter-${id}.wasm`);
+    const grammar = await Language.load(`${dir}/tree-sitter-${grammarForLanguage(id)}.wasm`);
     const parser = new Parser();
     parser.setLanguage(grammar);
     return { id, parser };
@@ -15304,41 +15319,34 @@ async function extractFile(file2, language, source) {
     }
     let nextEnclosing = enclosing;
     let nextContainer = container;
-    const bound = functionBinding(node);
-    const kind = DEFINITION_TYPES.get(node.type) ?? bound?.kind;
-    if (kind !== void 0) {
-      const name = bound?.name ?? nameOf(node);
-      if (name !== null) {
-        const id = `${file2}#${name}`;
-        symbols.push({
-          id,
-          name,
-          kind,
-          container: kind === "method" ? container : null,
-          file: file2,
-          startLine: node.startPosition.row,
-          endLine: node.endPosition.row,
-          tokens: estimateTokens(node)
-        });
-        nextEnclosing = id;
-        if (kind === "class") nextContainer = name;
-      }
+    const profileContainer = containerFor(node, language);
+    if (profileContainer !== null) nextContainer = profileContainer;
+    const definition = definitionFor(node, language, nextContainer);
+    if (definition !== null) {
+      const id = `${file2}#${definition.name}`;
+      symbols.push({
+        id,
+        name: definition.name,
+        kind: definition.kind,
+        container: definition.kind === "method" ? definition.container ?? nextContainer : null,
+        file: file2,
+        startLine: node.startPosition.row,
+        endLine: node.endPosition.row,
+        tokens: estimateTokens(node)
+      });
+      nextEnclosing = id;
+      if (definition.kind === "class") nextContainer = definition.name;
     }
-    collectTypeBindings(node, file2, nextContainer, types);
-    if (node.type === "call_expression" || node.type === "call") {
-      const callee = node.childForFieldName("function");
-      if (callee !== null) {
-        const site = readCallee(callee);
-        if (site !== null) {
-          calls.push({
-            fromSymbolId: nextEnclosing,
-            name: site.name,
-            receiver: site.receiver,
-            file: file2,
-            line: node.startPosition.row
-          });
-        }
-      }
+    collectTypeBindings(node, language, file2, nextContainer, types);
+    const call = callFor(node, language);
+    if (call !== null) {
+      calls.push({
+        fromSymbolId: nextEnclosing,
+        name: call.name,
+        receiver: call.receiver,
+        file: file2,
+        line: node.startPosition.row
+      });
     }
     if (node.type === "jsx_opening_element" || node.type === "jsx_self_closing_element") {
       const element = node.childForFieldName("name");
@@ -15356,7 +15364,7 @@ async function extractFile(file2, language, source) {
         }
       }
     }
-    collectImports(node, file2, imports);
+    collectImports(node, language, file2, imports);
     for (let i = 0; i < node.namedChildCount; i++) {
       const child = node.namedChild(i);
       if (child !== null) visit(child, nextEnclosing, nextContainer, depth + 1);
@@ -15364,6 +15372,70 @@ async function extractFile(file2, language, source) {
   };
   visit(root, null, null, 0);
   return { file: file2, symbols, calls, imports, types, truncated: truncated2 };
+}
+function definitionFor(node, language, container) {
+  const bound = functionBinding(node);
+  const existingKind = DEFINITION_TYPES.get(node.type) ?? bound?.kind;
+  const existingName = bound?.name ?? nameOf(node);
+  if (existingKind !== void 0 && existingName !== null) {
+    return { kind: existingKind, name: existingName };
+  }
+  if (language === "go") {
+    if (node.type === "type_spec") {
+      const name = nameOf(node);
+      return name === null ? null : { kind: "class", name };
+    }
+    if (node.type === "method_declaration") {
+      const name = nameOf(node);
+      const receiver = node.childForFieldName("receiver");
+      const receiverType = receiver === null ? null : receiverTypeName(receiver);
+      return name === null ? null : { kind: "method", name, container: receiverType };
+    }
+  }
+  if (language === "rust") {
+    if (node.type === "struct_item") {
+      const name = nameOf(node);
+      return name === null ? null : { kind: "class", name };
+    }
+    if (node.type === "function_item") {
+      const name = nameOf(node);
+      return name === null ? null : { kind: container === null ? "function" : "method", name };
+    }
+  }
+  if (language === "c" || language === "cpp") {
+    if (node.type === "class_specifier" || node.type === "struct_specifier") {
+      const name = nameOf(node);
+      return name === null ? null : { kind: "class", name };
+    }
+    if (node.type === "function_definition") {
+      const declarator = node.childForFieldName("declarator");
+      const name = declarator === null ? null : declaratorName(declarator);
+      return name === null ? null : { kind: container === null ? "function" : "method", name };
+    }
+  }
+  if (language === "java" && node.type === "method_declaration") {
+    const name = nameOf(node);
+    return name === null ? null : { kind: "method", name };
+  }
+  return null;
+}
+function containerFor(node, language) {
+  if (language === "rust" && node.type === "impl_item") {
+    return node.childForFieldName("type")?.text ?? null;
+  }
+  return null;
+}
+function declaratorName(node) {
+  if (node.type === "identifier" || node.type === "field_identifier") return node.text;
+  const nested = node.childForFieldName("declarator");
+  return nested === null ? null : declaratorName(nested);
+}
+function receiverTypeName(node) {
+  const parameter = node.namedChild(0);
+  if (parameter === null) return null;
+  const type = parameter.childForFieldName("type");
+  if (type === null) return null;
+  return type.type === "pointer_type" ? type.namedChild(0)?.text ?? null : type.text;
 }
 function declaredType(node) {
   const annotation = node.childForFieldName("type");
@@ -15378,7 +15450,7 @@ function declaredType(node) {
   }
   return null;
 }
-function collectTypeBindings(node, file2, container, out) {
+function collectTypeBindings(node, language, file2, container, out) {
   if (node.type === "variable_declarator" || node.type === "public_field_definition") {
     const name = node.childForFieldName("name");
     const type = declaredType(node);
@@ -15394,6 +15466,25 @@ function collectTypeBindings(node, file2, container, out) {
       out.push({ file: file2, name: pattern.text, type, container });
     }
   }
+  if (language === "java" && (node.type === "field_declaration" || node.type === "formal_parameter")) {
+    const nameNode = node.type === "field_declaration" ? node.childForFieldName("declarator")?.childForFieldName("name") ?? null : node.childForFieldName("name");
+    const type = node.childForFieldName("type");
+    if (nameNode !== null && type !== null) {
+      out.push({ file: file2, name: nameNode.text, type: type.text, container });
+    }
+  }
+}
+function callFor(node, language) {
+  if (node.type === "call_expression" || node.type === "call") {
+    const callee = node.childForFieldName("function");
+    return callee === null ? null : readCallee(callee);
+  }
+  if (language === "java" && node.type === "method_invocation") {
+    const name = node.childForFieldName("name");
+    if (name === null) return null;
+    return { name: name.text, receiver: node.childForFieldName("object")?.text ?? null };
+  }
+  return null;
 }
 function readCallee(callee) {
   if (callee.type === "identifier") {
@@ -15405,9 +15496,14 @@ function readCallee(callee) {
     if (property === null) return null;
     return { name: property.text, receiver: object2?.text ?? null };
   }
+  if (callee.type === "selector_expression") {
+    const field = callee.childForFieldName("field");
+    const operand = callee.childForFieldName("operand");
+    return field === null ? null : { name: field.text, receiver: operand?.text ?? null };
+  }
   return null;
 }
-function collectImports(node, file2, out) {
+function collectImports(node, language, file2, out) {
   if (node.type === "import_statement") {
     const source = node.childForFieldName("source");
     if (source === null) return;
@@ -15431,6 +15527,44 @@ function collectImports(node, file2, out) {
         if (alias !== null) out.push({ file: file2, source: specifier, local: alias.text });
       }
     }
+    return;
+  }
+  if (language === "go" && node.type === "import_spec") {
+    const path = node.childForFieldName("path");
+    const name = node.childForFieldName("name");
+    if (path !== null && name !== null) {
+      out.push({ file: file2, source: stripQuotes(path.text), local: name.text });
+    }
+    return;
+  }
+  if (language === "rust" && node.type === "use_declaration") {
+    const argument = node.childForFieldName("argument");
+    if (argument !== null) {
+      const segments = argument.text.split("::");
+      const local = segments[segments.length - 1] ?? "";
+      if (local !== "" && local !== "*") out.push({ file: file2, source: argument.text, local });
+    }
+    return;
+  }
+  if (language === "rust" && node.type === "mod_item") {
+    const name = nameOf(node);
+    if (name !== null) out.push({ file: file2, source: `./${name}`, local: name });
+    return;
+  }
+  if ((language === "c" || language === "cpp") && node.type === "preproc_include") {
+    const path = node.childForFieldName("path");
+    if (path === null || !path.text.startsWith('"')) return;
+    const source = stripQuotes(path.text);
+    const local = source.split("/").pop()?.replace(/\.[^.]+$/, "") ?? "";
+    if (local !== "") out.push({ file: file2, source: source.startsWith(".") ? source : `./${source}`, local });
+    return;
+  }
+  if (language === "java" && node.type === "import_declaration") {
+    const path = node.namedChild(0);
+    if (path === null) return;
+    const source = path.text;
+    const local = source.split(".").pop() ?? "";
+    if (local !== "" && local !== "*") out.push({ file: file2, source, local });
   }
 }
 function collectImportedNames(node) {
@@ -15690,7 +15824,20 @@ var SOURCE_EXTENSIONS = [
   ".jsx",
   ".mjs",
   ".cjs",
-  ".py"
+  ".py",
+  ".pyi",
+  ".go",
+  ".rs",
+  ".c",
+  ".h",
+  ".cc",
+  ".cp",
+  ".cpp",
+  ".cxx",
+  ".hpp",
+  ".hh",
+  ".hxx",
+  ".java"
 ];
 function resolveModulePath(fromFile, specifier, knownFiles) {
   if (!specifier.startsWith(".")) return null;
@@ -16912,7 +17059,7 @@ async function queryCodebase(root, index, options) {
 
 // src/repository-context.ts
 import { lstat, open } from "node:fs/promises";
-import { extname, join as join3 } from "node:path";
+import { join as join3 } from "node:path";
 var MAX_RULE_BYTES = 8192;
 var MAX_OVERVIEW_BYTES = 6144;
 var RULE_FILES = ["AGENTS.md", "CONTRIBUTING.md"];
@@ -16940,26 +17087,8 @@ function packageManager(manifests) {
   return "unknown";
 }
 function languageForFile(file2) {
-  switch (extname(file2).toLowerCase()) {
-    case ".ts":
-    case ".tsx":
-      return "typescript";
-    case ".js":
-    case ".jsx":
-      return "javascript";
-    case ".py":
-      return "python";
-    case ".go":
-      return "go";
-    case ".rs":
-      return "rust";
-    case ".java":
-      return "java";
-    case ".rb":
-      return "ruby";
-    default:
-      return null;
-  }
+  const language = languageForPath(file2);
+  return language === "tsx" ? "typescript" : language;
 }
 function languagesIn(index) {
   const filesByLanguage = /* @__PURE__ */ new Map();
