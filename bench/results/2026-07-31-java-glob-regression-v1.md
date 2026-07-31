@@ -25,17 +25,29 @@ when the bounded exact-hit page is filled by examples.
 
 ## Result
 
-| Metric | Baseline without plugin | Plugin enabled |
-| --- | ---: | ---: |
-| Correct final answers | 5 / 5 | 5 / 5 |
-| Shell discovery calls | 8 | 0 |
-| Native Code Intelligence calls | 0 | 6 |
-| Total discovery operations | 8 | 6 |
-| Median full-turn time | 11.7 s | 9.2 s |
+| Metric | Baseline without plugin | Plugin enabled | Change |
+| --- | ---: | ---: | ---: |
+| Correct final answers | 5 / 5 | 5 / 5 | preserved (0 pp) |
+| Shell discovery calls | 8 | 0 | **100% fewer** |
+| Native Code Intelligence calls | 0 | 6 | replaces shell discovery |
+| Total discovery operations | 8 | 6 | **25% fewer** |
+| Median full-turn time | 11.7 s | 9.2 s | **21.5% lower** |
 
-For this one regression task, the enabled arm made 25% fewer discovery
-operations and had a 21% lower median full-turn time while preserving answer
-correctness. The raw events are in the accompanying
+### What improved
+
+1. **Recursive basename globs:** `*.java` now searches nested Java source
+   directories in a host-file snapshot, matching ripgrep behavior. The agent's
+   familiar search reached `gson/.../Gson.java` instead of returning no hits.
+2. **Qualified trace anchors:** a request such as
+   `Gson.fromJson(String, Class)` now traces the declaration name `fromJson`,
+   rather than searching the human-readable signature literally.
+3. **Definition-first trace selection:** when a short exact-search page is
+   filled with call sites or examples, the trace resolves the matching indexed
+   declaration rather than following an unrelated container.
+
+The measured outcome for this task is **no correctness regression**, **100%
+fewer shell discovery calls**, **25% fewer total discovery operations**, and a
+**21.5% lower median full-turn time**. The raw events are in the accompanying
 [machine-readable rows](2026-07-31-java-glob-regression-v1.json).
 
 ## Limits

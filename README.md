@@ -124,9 +124,16 @@ historical evidence.
 That A/B also found a concrete Java host-snapshot incompatibility: a familiar
 `*.java` glob did not reach nested source directories. The fixed, targeted
 [Java regression A/B](bench/results/2026-07-31-java-glob-regression-v1.md)
-kept correctness at `5 / 5`, reduced discovery operations from `8` to `6`, and
-reduced median full-turn time from `11.7 s` to `9.2 s`. It is deliberately
-reported as a one-task regression result, not an aggregate performance claim.
+kept correctness at `5 / 5` while eliminating shell discovery calls
+(`8 → 0`, **100% fewer**), reducing total discovery operations (`8 → 6`,
+**25% fewer**), and reducing median full-turn time (`11.7 s → 9.2 s`,
+**21.5% lower**).
+
+The improvement comes from three concrete behavior fixes: basename globs such
+as `*.java` now search recursively like ripgrep; qualified method signatures
+are reduced to their declaration anchor for `trace`; and a trace prefers the
+indexed declaration when its first exact-hit page contains usage examples.
+This remains a one-task regression result, not an aggregate performance claim.
 
 Run `npm test` for the current automated-suite total. A fresh managed Git
 installation of the current `0.1.0` stable release on BB `0.34.0` indexed this repository into `227` symbols and
