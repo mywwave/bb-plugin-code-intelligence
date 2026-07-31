@@ -72,7 +72,8 @@ export function buildInstruction(
    * one to call and, crucially, when to stop.
    */
   const short = [
-    `Unknown question → codebase_query; known literal or identifier → instant_grep.`,
+    `Unknown question → codebase_query; known literal/location → instant_grep.`,
+    `Known ID relation → codebase_query trace first, never instant_grep first.`,
     `instant_grep is primary exact search: literal by default, regex only when needed; answer locations from its hits.`,
     `No terminal rg/grep/find unless it errors or remains truncated after refinement.`,
     `Hit → symbol_lookup for definitions/references; code_graph_context once for structure.`,
@@ -107,7 +108,7 @@ export function buildInstruction(
     `location or existence question, answer from those hits and do not call graph analysis.`,
     `If it truncates, refine the search or use \`nextOffset\` before drawing conclusions.`,
     `Do not run terminal \`rg\`, \`grep\`, or \`find\` for repository discovery while \`instant_grep\` is available.`,
-    `Use a targeted shell fallback only if this tool errors or remains truncated after refinement, and state why.`,
+    `Use a shell fallback only if this tool errors or stays truncated; state why.`,
     ``,
     `## Exploratory questions`,
     ``,
@@ -115,6 +116,8 @@ export function buildInstruction(
     `identifier or file, call \`codebase_query\` first. It combines bounded exact evidence with`,
     `ranked entry points in one call. Give a short explanation of why this route fits; then choose`,
     `an exact hit or symbol before using structural analysis.`,
+    `Known direct relation → \`codebase_query\` \`mode: "trace"\` first, not \`instant_grep\`: exact source context`,
+    `plus direct static relations in one call; absence remains inconclusive.`,
     ``,
     `## Repository orientation`,
     ``,
@@ -145,7 +148,7 @@ export function buildInstruction(
     `## Which shape to use`,
     ``,
     `- No foothold yet — use \`codebase_query\` once.`,
-    `- Known identifier, literal, import, or regex — use \`instant_grep\` first.`,
+    `- Known identifier relationship — \`codebase_query\` mode trace once; pure identifier, string, import, or regex — \`instant_grep\`.`,
     `- You have a symbol or file — call it with those as seeds; this is the path`,
     `  the benchmark measured, and it is the stronger one.`,
     `- You need exact definition/references after discovery — call \`symbol_lookup\`; it`,

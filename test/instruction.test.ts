@@ -116,6 +116,15 @@ describe("buildInstruction", () => {
     expect(text).toContain("No terminal rg/grep/find unless it errors");
   });
 
+  it("routes a known identifier relationship through one trace query", () => {
+    const text = buildInstruction(
+      { root: "/repo", symbols: 15539, graphCompleteness: 0.616, graphCompletenessReliable: true },
+      "short",
+    )!;
+
+    expect(text).toContain("Known ID relation → codebase_query trace first, never instant_grep first");
+  });
+
   it("adds a graph-only budget to the concise arm", () => {
     const summary = {
       root: "/repo",

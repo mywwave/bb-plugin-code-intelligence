@@ -52,6 +52,7 @@ unreleased commits may track the repository's `main` branch instead.
 | --- | --- | --- |
 | Known identifier, string, import, or regex | `instant_grep` | Exact file/line hits, glob filtering, context, and paging. |
 | “Where/how is this handled?” with no exact target | `codebase_query` | Bounded exploration: exact evidence plus ranked entry files. |
+| Known identifier, direct caller/callee/delegation | `codebase_query` with `mode: "trace"` | Exact source context and direct static relations in one call. |
 | Known symbol/file, need callers or tests | `symbol_lookup`, `code_graph_context` | Definitions, static relationships, tests, and stated graph limits. |
 | Before or after an implementation edit | `prechange_impact`, `verify_change` | Direct impact and declared verification checks. |
 
@@ -130,6 +131,9 @@ full [validation record](docs/VALIDATION.md) and [approach](docs/APPROACH.md).
 Static analysis cannot prove dynamic wiring: reflection, generated code,
 runtime dispatch, and unparsed languages remain explicit blind spots. The
 plugin does not intercept or prohibit arbitrary terminal searches.
+
+`trace` reports only direct edges found in the static index. An empty trace is
+not proof that a runtime relation does not exist.
 
 The proposed integration boundary is in the
 [maintainer proposal](docs/MAINTAINER_PROPOSAL.md).
