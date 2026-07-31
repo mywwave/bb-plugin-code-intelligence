@@ -54,5 +54,6 @@ paths.
 The first small agent-routing pilot is published under
 [`bench/results/`](../bench/results/). The current cross-language suite is
 defined in [`bench/tasks/agent-value-v2.json`](../bench/tasks/agent-value-v2.json)
-and publishes its own raw result rows and aggregate report under the same
-results directory. Neither is a statistically general performance claim.
+and publishes its [v3 raw result rows and aggregate report](../bench/results/2026-07-31-agent-value-v3.md)
+under the same results directory. Neither is a statistically general performance
+claim.
