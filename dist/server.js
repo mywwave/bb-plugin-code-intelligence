@@ -15265,7 +15265,7 @@ function toPosix(path) {
 }
 
 // src/graph/extract.ts
-var EXTRACTION_VERSION = 2;
+var EXTRACTION_VERSION = 3;
 var DEFINITION_TYPES = /* @__PURE__ */ new Map([
   ["function_declaration", "function"],
   ["function_definition", "function"],
@@ -15323,12 +15323,13 @@ async function extractFile(file2, language, source) {
     if (profileContainer !== null) nextContainer = profileContainer;
     const definition = definitionFor(node, language, nextContainer);
     if (definition !== null) {
-      const id = `${file2}#${definition.name}`;
+      const symbolContainer = definition.kind === "method" ? definition.container ?? nextContainer : null;
+      const id = symbolId(file2, definition.name, definition.kind, symbolContainer, node.startPosition);
       symbols.push({
         id,
         name: definition.name,
         kind: definition.kind,
-        container: definition.kind === "method" ? definition.container ?? nextContainer : null,
+        container: symbolContainer,
         file: file2,
         startLine: node.startPosition.row,
         endLine: node.endPosition.row,
@@ -15372,6 +15373,10 @@ async function extractFile(file2, language, source) {
   };
   visit(root, null, null, 0);
   return { file: file2, symbols, calls, imports, types, truncated: truncated2 };
+}
+function symbolId(file2, name, kind, container, start) {
+  const qualified = kind === "method" && container !== null ? `${container}.${name}` : name;
+  return `${file2}#${qualified}@${start.row + 1}:${start.column + 1}`;
 }
 function definitionFor(node, language, container) {
   const bound = functionBinding(node);

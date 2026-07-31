@@ -40,7 +40,7 @@ describe("extractFile", () => {
 
     const inside = result.calls.find((c) => c.line === 1);
     const topLevel = result.calls.find((c) => c.line === 3);
-    expect(inside?.fromSymbolId).toBe("src/a.ts#outer");
+    expect(inside?.fromSymbolId).toBe("src/a.ts#outer@1:1");
     // Top-level calls have no source symbol and must not invent one.
     expect(topLevel?.fromSymbolId).toBeNull();
   });
@@ -173,6 +173,25 @@ describe("extractFile", () => {
     expect(java.types).toContainEqual({ file: "app/Service.java", name: "util", type: "Util", container: "Service" });
   });
 
+  it("keeps same-named Go functions and receiver methods separately addressable", async () => {
+    const result = await extractFile(
+      "mapstructure.go",
+      "go",
+      [
+        "func Decode(input any) {}",
+        "type Decoder struct{}",
+        "func (d *Decoder) Decode(input any) { Decode(input) }",
+      ].join("\n"),
+    );
+
+    expect(result.symbols.map((symbol) => symbol.id)).toEqual([
+      "mapstructure.go#Decode@1:1",
+      "mapstructure.go#Decoder@2:6",
+      "mapstructure.go#Decoder.Decode@3:1",
+    ]);
+    expect(result.calls[0]?.fromSymbolId).toBe("mapstructure.go#Decoder.Decode@3:1");
+  });
+
   it("survives a syntax error without losing the rest of the file", async () => {
     // tree-sitter is error-tolerant; a broken region must not discard the file.
     const result = await ts(
@@ -228,9 +247,9 @@ describe("resolveProject", () => {
     ];
 
     const { edges, stats } = resolveProject(files);
-    const edge = edges.find((e) => e.from === "src/a.ts#caller");
+    const edge = edges.find((e) => e.from === "src/a.ts#caller@2:1");
 
-    expect(edge?.to).toBe("src/util.ts#helper");
+    expect(edge?.to).toBe("src/util.ts#helper@1:8");
     expect(edge?.strategy).toBe("importMap");
     expect(edge?.weight).toBe(CONFIDENCE.importMap);
     expect(stats.ambiguous).toBe(0);
@@ -247,7 +266,7 @@ describe("resolveProject", () => {
 
     const { edges, stats } = resolveProject(files);
 
-    expect(edges.filter((e) => e.from === "src/a.ts#caller")).toHaveLength(0);
+    expect(edges.filter((e) => e.from === "src/a.ts#caller@1:1")).toHaveLength(0);
     expect(stats.ambiguous).toBe(1);
   });
 
@@ -268,8 +287,8 @@ describe("resolveProject", () => {
     ];
 
     const { edges } = resolveProject(files);
-    const same = edges.find((e) => e.from === "src/local.ts#caller");
-    const unique = edges.find((e) => e.from === "src/use.ts#user");
+    const same = edges.find((e) => e.strategy === "sameFile");
+    const unique = edges.find((e) => e.strategy === "uniqueName");
 
     expect(same?.strategy).toBe("sameFile");
     expect(unique?.strategy).toBe("uniqueName");
@@ -297,8 +316,8 @@ describe("import edges", () => {
     const edge = edges.find((e) => e.strategy === "importEdge");
 
     expect(edge).toEqual({
-      from: "src/a.ts#caller",
-      to: "src/util.ts#helper",
+      from: "src/a.ts#caller@2:1",
+      to: "src/util.ts#helper@1:8",
       weight: CONFIDENCE.importEdge,
       strategy: "importEdge",
     });
@@ -346,9 +365,9 @@ describe("typed receiver resolution", () => {
     ];
 
     const { edges, stats } = resolveProject(files);
-    const edge = edges.find((e) => e.from === "src/use.ts#handler" && e.strategy !== "importEdge");
+    const edge = edges.find((e) => e.strategy === "typedReceiver");
 
-    expect(edge?.to).toBe("src/repo.ts#find");
+    expect(edge?.to).toBe("src/repo.ts#Repo.find@1:21");
     expect(edge?.strategy).toBe("typedReceiver");
     expect(stats.byStrategy.typedReceiver).toBe(1);
   });
@@ -363,7 +382,7 @@ describe("typed receiver resolution", () => {
     const { edges } = resolveProject(files);
     const edge = edges.find((e) => e.strategy === "typedReceiver");
 
-    expect(edge?.to).toBe("src/repo.ts#save");
+    expect(edge?.to).toBe("src/repo.ts#Repo.save@1:21");
   });
 
   it("resolves a field access through this", async () => {
@@ -376,7 +395,7 @@ describe("typed receiver resolution", () => {
     const { edges } = resolveProject(files);
     const edge = edges.find((e) => e.strategy === "typedReceiver");
 
-    expect(edge?.to).toBe("src/repo.ts#save");
+    expect(edge?.to).toBe("src/repo.ts#Repo.save@1:21");
   });
 
   it("stays silent when the declared type owns no such method", async () => {

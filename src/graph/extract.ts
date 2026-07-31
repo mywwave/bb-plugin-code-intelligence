@@ -17,15 +17,15 @@ import { parseSource } from "./languages.js";
  * would otherwise look fresh: file hashes only say the code did not change,
  * never that our reading of it did not.
  *
- * 2 — arrow-bound functions and class fields became symbols; JSX element usage
- *     became a reference.
+ * 3 — symbol identifiers include their owner and source position, so same-named
+ *     declarations in one file cannot overwrite each other in the graph.
  */
-export const EXTRACTION_VERSION = 2;
+export const EXTRACTION_VERSION = 3;
 
 export type SymbolKind = "function" | "class" | "method";
 
 export interface CodeSymbol {
-  /** `path#name` — stable across runs, readable in test failures. */
+  /** `path#<Owner.>name@line:column` — unique, stable source identity. */
   readonly id: string;
   readonly name: string;
   readonly kind: SymbolKind;
@@ -201,12 +201,15 @@ export async function extractFile(
 
     const definition = definitionFor(node, language, nextContainer);
     if (definition !== null) {
-        const id = `${file}#${definition.name}`;
+        const symbolContainer = definition.kind === "method"
+          ? (definition.container ?? nextContainer)
+          : null;
+        const id = symbolId(file, definition.name, definition.kind, symbolContainer, node.startPosition);
         symbols.push({
           id,
           name: definition.name,
           kind: definition.kind,
-          container: definition.kind === "method" ? (definition.container ?? nextContainer) : null,
+          container: symbolContainer,
           file,
           startLine: node.startPosition.row,
           endLine: node.endPosition.row,
@@ -271,6 +274,17 @@ export async function extractFile(
   visit(root, null, null, 0);
 
   return { file, symbols, calls, imports, types, truncated };
+}
+
+function symbolId(
+  file: string,
+  name: string,
+  kind: SymbolKind,
+  container: string | null,
+  start: AstNode["startPosition"],
+): string {
+  const qualified = kind === "method" && container !== null ? `${container}.${name}` : name;
+  return `${file}#${qualified}@${start.row + 1}:${start.column + 1}`;
 }
 
 function definitionFor(node: AstNode, language: LanguageId, container: string | null): Definition | null {
