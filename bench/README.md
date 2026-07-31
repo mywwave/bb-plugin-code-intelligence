@@ -16,6 +16,13 @@ The Java host-snapshot glob regression discovered by that suite has its own
 [targeted A/B record](results/2026-07-31-java-glob-regression-v1.md); it does
 not replace the cross-language result.
 
+`tasks/agent-value-v4.json` is the next, diagnostic-only suite. It keeps the
+same revision-pinned five fixtures but replaces three one-hop questions with
+multi-hop navigation tasks. Its runner is intentionally separate from v2 so
+historical evidence cannot be rewritten. It records observed BB event-timeline
+intervals alongside correctness and discovery routing; these intervals are not
+CPU profiles, hidden-reasoning measurements, or causal latency claims.
+
 ## Controlled variables
 
 Use the fixture commits and exact prompts in the selected task contract, the
@@ -45,12 +52,42 @@ node bench/run-agent-value-v2.mjs \
   --out /tmp/agent-value-v2.json
 ```
 
+For v4, first set the instruction arm before spawning its threads. Keep the
+plugin revision, provider, model, fixture checkout, and permission mode fixed;
+only then run the corresponding arm. The `--instruction-style` argument labels
+the raw rows — it does not mutate plugin configuration itself.
+
+```bash
+# Run this in the enabled arm before spawning its fresh threads.
+bb code-intelligence instruction playbook
+
+node bench/run-agent-value-v4.mjs \
+  --project <fixture-project-id> \
+  --arm plugin_playbook \
+  --instruction-style playbook \
+  --engine-label remote-host-snapshot \
+  --out /tmp/agent-value-v4.json
+```
+
+Repeat with `short` and arm name `plugin_short`. For the baseline, uninstall or
+disable the plugin, use arm name `baseline_without_plugin`, and omit the
+instruction-style label. The runner fetches every event-log page before
+selecting the final completed turn, so the diagnostic result does not depend on
+the old 500-event log ceiling.
+
 ## Metrics
 
 The runner records answer correctness, completed native Code Intelligence tool
 calls, shell-search commands, total discovery operations, and end-to-end turn
 duration. Completed tool events, rather than plan text, are the source of
 truth for tool use.
+
+The v4 runner additionally records paired `item/started` → `item/completed`
+event intervals for native Code Intelligence calls, shell-search commands, and
+reasoning items. It merges overlaps before calculating the classified portion
+of a turn and retains malformed-lifecycle diagnostics. If a completed turn,
+pair, type, or timestamp is ambiguous, every v4 duration field is `null` rather
+than guessed; call counts and diagnostics remain available for inspection.
 
 ## Interpretation
 

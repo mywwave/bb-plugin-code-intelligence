@@ -83,6 +83,13 @@ describe("instantGrep", () => {
     );
   });
 
+  it("accepts enough bounded context for one complete declaration while rejecting larger pages", () => {
+    expect(() => buildInstantGrepArgs({ pattern: "construct", afterContext: 25 })).not.toThrow();
+    expect(() => buildInstantGrepArgs({ pattern: "construct", afterContext: 33 })).toThrow(
+      "afterContext must be an integer from 0 through 32",
+    );
+  });
+
   it("normalizes Windows ripgrep paths to the POSIX agent-facing contract", () => {
     expect(normalizeInstantGrepFile(".\\payment.ts")).toBe("./payment.ts");
     expect(normalizeInstantGrepFile("src\\payment\\handler.ts")).toBe("./src/payment/handler.ts");
