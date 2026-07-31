@@ -1,24 +1,44 @@
-# Agent-routing A/B smoke benchmark
+# Agent-routing A/B benchmarks
 
-This benchmark compares agent behavior with Code Intelligence absent and
-installed. It is deliberately a small behavioral smoke suite, not a claim of
-statistical performance superiority.
+These benchmarks compare agent behavior with Code Intelligence absent and
+enabled. They measure code-navigation behavior, not raw search-engine speed or
+general developer productivity.
+
+The first TypeScript smoke pilot remains published for historical comparison.
+The current cross-language evidence suite is
+[`tasks/agent-value-v2.json`](tasks/agent-value-v2.json): five pinned public
+repositories (Go, Rust, C, C++, and Java), five read-only navigation questions,
+and five fresh repetitions in each arm. Its report and raw result data are
+[published](results/2026-07-31-agent-value-v2.md) beside the task contract.
 
 ## Controlled variables
 
-Use the repository commit and tasks in `tasks.json`, a fresh BB data directory
-for each arm, BB `0.34.0`, the same provider/model, full permission mode, and
-unmanaged workspace pointing at the same checkout. Start every thread fresh;
-do not tell the agent to prefer a particular tool.
+Use the fixture commits and exact prompts in the selected task contract, the
+same BB host/provider/model/reasoning level, the same permission mode, and an
+unmanaged workspace pointing at the same checkout. Reset only the Code
+Intelligence installation state between arms, start every thread fresh, and do
+not tell the agent to prefer a particular tool.
 
 ## Arms
 
 1. **Baseline**: no Code Intelligence plugin is installed.
-2. **Code Intelligence**: install this commit with
-   `bb plugin install git:https://github.com/mywwave/bb-plugin-code-intelligence.git@<commit>`.
+2. **Code Intelligence**: install the managed Git plugin at the tested commit.
 
-Run every task at least three times per arm. The pilot results intentionally
-label their sample size and do not generalize beyond these tasks.
+Run every task the number of times declared in its contract. The current suite
+uses five repetitions per task and arm. Results intentionally label their sample
+size and do not generalize beyond their declared tasks.
+
+The included runner records a single task against its own BB project root;
+repeat it for each fixture and arm, using the exact project, arm, and output
+file for that collection:
+
+```bash
+node bench/run-agent-value-v2.mjs \
+  --project <fixture-project-id> \
+  --task go-decode-delegation \
+  --arm baseline_without_plugin \
+  --out /tmp/agent-value-v2.json
+```
 
 ## Metrics
 

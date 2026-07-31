@@ -15,8 +15,8 @@ Use two fixture classes:
 
 1. a small deterministic fixture with literals, regex-only matches, ignored
    files, binary files, and pagination boundaries;
-2. at least two public production-style TypeScript repositories of different
-   sizes.
+2. public production-style repositories spanning the supported languages under
+   test. The agent-value-v2 suite uses five: Go, Rust, C, C++, and Java.
 
 ## Search measurements
 
@@ -35,7 +35,9 @@ For exploratory tasks, define the task question, expected entry files, and
 expected symbols before running either method. Compare the first response's
 entry-point recall, whether exact evidence is included, number of follow-up
 searches, and total tool-output bytes. Keep agent model, prompt, repository
-commit, and time budget fixed across arms.
+commit, and time budget fixed across arms. The agent-value-v2 contract records
+correctness, completed discovery operations, native-plugin calls,
+shell-search calls, and wall time from fresh threads.
 
 ## Reporting
 
@@ -44,8 +46,10 @@ of failures. Separate local-server-root and remote-host-snapshot results. Do
 not merge them into a single speed number because they have different I/O
 paths.
 
-## Published pilot
+## Published evidence
 
 The first small agent-routing pilot is published under
-[`bench/results/`](../bench/results/). It is evidence of observed routing for
-its two tasks, not a statistically general performance claim.
+[`bench/results/`](../bench/results/). The current cross-language suite is
+defined in [`bench/tasks/agent-value-v2.json`](../bench/tasks/agent-value-v2.json)
+and publishes its own raw result rows and aggregate report under the same
+results directory. Neither is a statistically general performance claim.

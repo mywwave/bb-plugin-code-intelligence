@@ -85,25 +85,40 @@ uses its version-matched C++ grammar asset, validated against the C-family
 fixture in the automated suite. This is a baseline parser choice, not a claim
 that C preprocessor semantics or a compiler's type system are modelled.
 
+## What changes for a developer
+
+| Without Code Intelligence | With Code Intelligence |
+| --- | --- |
+| The agent composes its own `rg`/`find`/file-reading commands and interprets raw output. | Known names and patterns have bounded exact search; vague questions have ranked entry points; callers, tests, impact, and verification have dedicated context tools. |
+| Useful code evidence exists only in the terminal transcript the agent happened to build. | Tool results carry explicit files/lines, paging, and conservative static-analysis limits, so the next step has a narrower, citable basis. |
+| Each agent and task must rediscover a search routine. | BB supplies one host-aware navigation path across the supported languages while retaining shell fallback for unusual cases. |
+
 ## Evidence, not promises
 
-The public [agent-routing A/B pilot](bench/results/2026-07-31-agent-routing-smoke-v1.md)
-compares a clean BB instance against the same instance with this plugin. Both
-arms used read-only tasks and the same provider/model/repository commit.
+The current [cross-language A/B](bench/results/2026-07-31-agent-value-v2.md)
+ran 50 fresh, read-only BB threads: five predeclared navigation questions in
+five pinned public repositories (Go, Rust, C, C++, Java), five repetitions per
+arm. The provider/model, permission mode, BB version, and fixture commit were
+kept fixed.
 
-| Task | Correct answers, baseline → enabled | Shell discovery searches | Other observed result |
-| --- | --- | --- | --- |
-| Known symbol | `3/3 → 3/3` | `3 → 0` | Native `instant_grep`: `0 → 3`. |
-| Exploratory routing | `3/3 → 3/3` | `21 → 5` | Native `instant_grep`: `0 → 11`; total operations: `45 → 35`. |
+| Measured result | Without plugin | With plugin |
+| --- | ---: | ---: |
+| Correct final answers | `25 / 25` | `25 / 25` |
+| Native Code Intelligence calls | `0` | `61` |
+| Shell discovery calls | `42` | `10` |
+| Total discovery operations | `42` | `71` |
+| Median full-turn time | `14.0 s` | `16.6 s` |
 
-The exploratory-task median wall time was `35.2 s → 31.0 s`. Raw counts,
-prompts, environment, and per-run timings are in the linked report and
-[machine-readable data](bench/results/2026-07-31-agent-routing-smoke-v1.json).
-
-This is evidence that the plugin changed observed agent routing without losing
-correctness in those tasks. It is **not** a general latency, cost, or quality
-claim: the pilot has three runs per task, one provider/model, and one public
-TypeScript repository. It does not claim to beat ripgrep.
+So the demonstrated value is **structured native navigation without losing
+correctness**: the enabled runs replaced 76% of observed shell-search calls
+with Code Intelligence tools. It is not a claim that every task becomes faster
+or uses fewer operations — this particular short-task sample did not. Read the
+[method and per-language results](bench/results/2026-07-31-agent-value-v2.md),
+[task contract](bench/tasks/agent-value-v2.json), and
+[raw rows](bench/results/2026-07-31-agent-value-v2.json) before drawing a
+broader conclusion. The earlier TypeScript
+[routing pilot](bench/results/2026-07-31-agent-routing-smoke-v1.md) remains as
+historical evidence.
 
 Run `npm test` for the current automated-suite total. A fresh managed Git
 installation of the current `0.1.0` stable release on BB `0.34.0` indexed this repository into `227` symbols and
@@ -132,23 +147,4 @@ npm run install-git-hooks
 frontend bundle, panel, or settings UI.
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md) for the full local development and
-pull-request workflow. The repository uses a manual local release gate rather
-than GitHub Actions.
-
-## Releases
-
-Prepare a reviewed release locally, commit and push it, then publish its
-annotated tag and GitHub Release:
-
-```bash
-npm run release:prepare -- 1.2.3
-git add package.json package-lock.json CHANGELOG.md dist
-git commit -m "release: prepare v1.2.3"
-git push origin main
-npm run check
-npm run release:publish -- 1.2.3
-```
-
-`release:publish` refuses a dirty tree, an unpushed commit, a mismatched
-package version, or an existing tag. After the GitHub Release succeeds, it
-promotes `stable` to that release commit. It does not require GitHub Actions.
+pull-request workflow.

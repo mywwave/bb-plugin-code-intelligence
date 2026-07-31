@@ -37,12 +37,12 @@ describe("contributor contract", () => {
     await expect(access(resolve(root, ".github/workflows/ci.yml"))).rejects.toThrow();
   });
 
-  it("makes the manual release path discoverable from contributor guidance", async () => {
+  it("keeps user guidance public while keeping the owner release procedure private", async () => {
     await expect(readRepositoryFile("CONTRIBUTING.md")).resolves.toContain("npm ci && npm run check");
     await expect(readRepositoryFile("README.md")).resolves.toContain("npm run check");
-    await expect(readRepositoryFile("docs/RELEASE_CHECKLIST.md")).resolves.toContain(
-      "npm run release:publish",
-    );
+    await expect(readRepositoryFile("CONTRIBUTING.md")).resolves.not.toContain("release:publish");
+    await expect(readRepositoryFile("README.md")).resolves.not.toContain("release:publish");
+    await expect(access(resolve(root, "docs/RELEASE_CHECKLIST.md"))).rejects.toThrow();
     await expect(readRepositoryFile("SECURITY.md")).resolves.toContain(
       "Private Vulnerability Reporting",
     );
@@ -56,8 +56,6 @@ describe("contributor contract", () => {
     expect(readme).not.toContain(
       "git:https://github.com/mywwave/bb-plugin-code-intelligence.git@main",
     );
-    await expect(readRepositoryFile("docs/RELEASE_CHECKLIST.md")).resolves.toContain(
-      "promotes `stable`",
-    );
+    expect(readme).toContain("bb plugin update code-intelligence");
   });
 });

@@ -1,0 +1,115 @@
+{
+  "suite": "agent-value-v2",
+  "recordedAt": "2026-07-31",
+  "purpose": "Measure read-only code-navigation outcomes with Code Intelligence absent versus enabled. This is not a raw-search-engine speed benchmark.",
+  "fixtures": [
+    {
+      "id": "go-mapstructure",
+      "language": "Go",
+      "repository": "https://github.com/mitchellh/mapstructure",
+      "commit": "8508981c8b6c964e6986dd8aa85490e70ce3c2e2",
+      "workspaceDirectory": "go"
+    },
+    {
+      "id": "rust-anyhow",
+      "language": "Rust",
+      "repository": "https://github.com/dtolnay/anyhow",
+      "commit": "1dbe1862aae650423e3361fbd20b7d17c5109cc3",
+      "workspaceDirectory": "rust"
+    },
+    {
+      "id": "c-cjson",
+      "language": "C",
+      "repository": "https://github.com/DaveGamble/cJSON",
+      "commit": "fb16e5cf358798aabb049655975cde8427101056",
+      "workspaceDirectory": "c"
+    },
+    {
+      "id": "cpp-fmt",
+      "language": "C++",
+      "repository": "https://github.com/fmtlib/fmt",
+      "commit": "e2243a6a7f4a8c09e9233a253f3d1f71e45d8cef",
+      "workspaceDirectory": "cpp"
+    },
+    {
+      "id": "java-gson",
+      "language": "Java",
+      "repository": "https://github.com/google/gson",
+      "commit": "0482d5cadc7e9018d3b4ccb3145f62c2fba2f9bd",
+      "workspaceDirectory": "java"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "go-decode-delegation",
+      "fixture": "go-mapstructure",
+      "prompt": "Read-only task. In the Go repository, where is the package-level Decode function defined? Name the constructor it uses and the Decode method it ultimately calls. Answer in two short bullets: file path; then the delegation chain. Do not edit files.",
+      "expected": {
+        "pathIncludes": "mapstructure.go",
+        "requiredTerms": ["NewDecoder", "Decode"]
+      }
+    },
+    {
+      "id": "rust-error-backtrace",
+      "fixture": "rust-anyhow",
+      "prompt": "Read-only task. In the Rust repository, where is anyhow::Error defined, and what field stores its implementation? Then state which method exposes its backtrace. Answer in two short bullets: file path; then field and method. Do not edit files.",
+      "expected": {
+        "pathIncludes": "src/lib.rs",
+        "requiredTerms": ["inner", "backtrace"]
+      }
+    },
+    {
+      "id": "c-parse-delegation",
+      "fixture": "c-cjson",
+      "prompt": "Read-only task. In the C repository, where is cJSON_Parse defined and which parser function does it delegate to? Answer in two short bullets: file path; then the delegation. Do not edit files.",
+      "expected": {
+        "pathIncludes": "cJSON.c",
+        "requiredTerms": ["cJSON_ParseWithOpts"]
+      }
+    },
+    {
+      "id": "cpp-vformat-implementation",
+      "fixture": "cpp-fmt",
+      "prompt": "Read-only task. In the C++ repository, where is the locale-taking fmt::vformat implementation defined, and which lower-level function formats into its buffer? Answer in two short bullets: file path; then the call. Do not edit files.",
+      "expected": {
+        "pathIncludes": "include/fmt/format.h",
+        "requiredTerms": ["detail::vformat_to"]
+      }
+    },
+    {
+      "id": "java-from-json-delegation",
+      "fixture": "java-gson",
+      "prompt": "Read-only task. In the Java repository, where is Gson.fromJson(String, Class) defined and which TypeToken operation does it use before delegation? Answer in two short bullets: file path; then the delegation. Do not edit files.",
+      "expected": {
+        "pathIncludes": "gson/src/main/java/com/google/gson/Gson.java",
+        "requiredTerms": ["TypeToken.get", "fromJson"]
+      }
+    }
+  ],
+  "protocol": {
+    "arms": [
+      "baseline_without_plugin",
+      "plugin_enabled"
+    ],
+    "repetitionsPerTaskPerArm": 5,
+    "threadRules": [
+      "Use a fresh thread for every repetition.",
+      "Use the same provider, model, reasoning level, permission mode, fixture workspace, and exact prompt in both arms.",
+      "Do not tell the agent which search tool to prefer.",
+      "Do not edit fixture files."
+    ],
+    "successRule": "A response is correct only when it includes the expected path substring and every required term, evaluated against the final visible answer.",
+    "record": [
+      "taskId",
+      "arm",
+      "repetition",
+      "threadId",
+      "correct",
+      "wallTimeMs",
+      "completedDiscoveryOperations",
+      "nativePluginCalls",
+      "shellSearchCalls"
+    ],
+    "interpretation": "Compare totals and medians. Five repetitions are an observational sample, not a statistical significance test or a claim about all developer work."
+  }
+}
