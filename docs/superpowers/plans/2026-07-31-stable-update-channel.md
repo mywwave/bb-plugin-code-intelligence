@@ -105,7 +105,7 @@ Expected: typecheck, all tests, build, metadata verification, and committed-arti
 
 - [ ] **Step 2: Push the commits and set the first stable pointer**
 
-Run: `git push origin main && git push origin refs/tags/v0.1.0:refs/heads/stable`
+Run: `git push origin main && git push origin refs/tags/v0.1.0^{}:refs/heads/stable`
 
 Expected: `origin/stable` equals the published `v0.1.0` commit.
 
