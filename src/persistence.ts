@@ -16,10 +16,10 @@ import { createHash } from "node:crypto";
 import { gunzipSync, gzipSync } from "node:zlib";
 
 import { EXTRACTION_VERSION, type CodeSymbol, type FileExtraction } from "./graph/extract.js";
-import type { ResolvedEdge } from "./graph/resolve.js";
+import type { ResolvedEdge, ResolvedTypeRelation } from "./graph/resolve.js";
 
 /** Bumped whenever the stored shape changes; old rows are then discarded. */
-const STORAGE_VERSION = 4;
+const STORAGE_VERSION = 5;
 
 /**
  * The stored version folds in what the extractor produces, not just how it is
@@ -51,11 +51,14 @@ export const PERSISTENCE_MIGRATIONS: readonly string[] = [
      built_at_ms INTEGER NOT NULL
    )`,
   `ALTER TABLE snapshots ADD COLUMN extractions BLOB`,
+  `ALTER TABLE snapshots ADD COLUMN type_relations BLOB`,
 ];
 
 export interface Snapshot {
   readonly symbols: readonly CodeSymbol[];
   readonly edges: readonly ResolvedEdge[];
+  /** Resolved hierarchy facts; restored without recomputing project resolution. */
+  readonly typeRelations: readonly ResolvedTypeRelation[];
   readonly extractions: readonly FileExtraction[];
   /** repository-relative path -> content hash, for freshness checks. */
   readonly fileHashes: ReadonlyMap<string, string>;
@@ -98,13 +101,14 @@ export interface SnapshotStore {
 export function saveSnapshot(db: SnapshotStore, root: string, snapshot: Snapshot): void {
   db.prepare(
     `INSERT INTO snapshots
-       (root, version, symbols, edges, extractions, file_hashes, ambiguous_calls,
+       (root, version, symbols, edges, type_relations, extractions, file_hashes, ambiguous_calls,
         completeness, completeness_reliable, built_at_ms)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(root) DO UPDATE SET
        version = excluded.version,
        symbols = excluded.symbols,
        edges = excluded.edges,
+       type_relations = excluded.type_relations,
        extractions = excluded.extractions,
        file_hashes = excluded.file_hashes,
        ambiguous_calls = excluded.ambiguous_calls,
@@ -116,6 +120,7 @@ export function saveSnapshot(db: SnapshotStore, root: string, snapshot: Snapshot
     SNAPSHOT_VERSION,
     pack(snapshot.symbols),
     pack(snapshot.edges),
+    pack(snapshot.typeRelations),
     pack(snapshot.extractions),
     pack([...snapshot.fileHashes]),
     snapshot.ambiguousCalls,
@@ -139,6 +144,7 @@ export function loadSnapshot(db: SnapshotStore, root: string): Snapshot | null {
     | {
         symbols: Uint8Array;
         edges: Uint8Array;
+        type_relations: Uint8Array;
         extractions: Uint8Array;
         file_hashes: Uint8Array;
         ambiguous_calls: number;
@@ -154,6 +160,7 @@ export function loadSnapshot(db: SnapshotStore, root: string): Snapshot | null {
     return {
       symbols: unpack<CodeSymbol[]>(row.symbols),
       edges: unpack<ResolvedEdge[]>(row.edges),
+      typeRelations: unpack<ResolvedTypeRelation[]>(row.type_relations),
       extractions: unpack<FileExtraction[]>(row.extractions),
       fileHashes: new Map(unpack<Array<[string, string]>>(row.file_hashes)),
       ambiguousCalls: row.ambiguous_calls,
@@ -233,6 +240,7 @@ export function exportSnapshot(snapshot: Snapshot): Buffer {
     version: SNAPSHOT_VERSION,
     symbols: snapshot.symbols,
     edges: snapshot.edges,
+    typeRelations: snapshot.typeRelations,
     extractions: snapshot.extractions,
     fileHashes: [...snapshot.fileHashes],
     ambiguousCalls: snapshot.ambiguousCalls,
@@ -249,6 +257,7 @@ export function importSnapshot(blob: Buffer): Snapshot | null {
       version: number;
       symbols: CodeSymbol[];
       edges: ResolvedEdge[];
+      typeRelations: ResolvedTypeRelation[];
       extractions: FileExtraction[];
       fileHashes: Array<[string, string]>;
       ambiguousCalls: number;
@@ -260,6 +269,7 @@ export function importSnapshot(blob: Buffer): Snapshot | null {
     return {
       symbols: parsed.symbols,
       edges: parsed.edges,
+      typeRelations: parsed.typeRelations,
       extractions: parsed.extractions,
       fileHashes: new Map(parsed.fileHashes),
       ambiguousCalls: parsed.ambiguousCalls,

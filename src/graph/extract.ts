@@ -17,10 +17,11 @@ import { parseSource } from "./languages.js";
  * would otherwise look fresh: file hashes only say the code did not change,
  * never that our reading of it did not.
  *
+ * 4 — declared type hierarchy facts are retained separately from call sites.
  * 3 — symbol identifiers include their owner and source position, so same-named
  *     declarations in one file cannot overwrite each other in the graph.
  */
-export const EXTRACTION_VERSION = 3;
+export const EXTRACTION_VERSION = 4;
 
 export type SymbolKind = "function" | "class" | "method";
 
@@ -76,12 +77,21 @@ export interface TypeBinding {
   readonly container: string | null;
 }
 
+/** A declared inheritance or implementation relation, never inferred from calls. */
+export interface TypeRelation {
+  readonly file: string;
+  readonly subtype: string;
+  readonly supertype: string;
+  readonly kind: "extends" | "implements";
+}
+
 export interface FileExtraction {
   readonly file: string;
   readonly symbols: readonly CodeSymbol[];
   readonly calls: readonly CallSite[];
   readonly imports: readonly ImportBinding[];
   readonly types: readonly TypeBinding[];
+  readonly typeRelations: readonly TypeRelation[];
   /** The walk hit its depth limit here, so this file was read only in part. */
   readonly truncated?: boolean;
 }
@@ -92,6 +102,10 @@ const DEFINITION_TYPES: ReadonlyMap<string, SymbolKind> = new Map([
   ["generator_function_declaration", "function"],
   ["class_declaration", "class"],
   ["class_definition", "class"], // python
+  // A type node is useful for hierarchy/implementation lookup. Interface
+  // method signatures are still not extracted, so this does not pollute call
+  // resolution with declaration-only methods.
+  ["interface_declaration", "class"],
   ["method_definition", "method"],
 ]);
 
@@ -102,7 +116,10 @@ interface Definition {
   readonly container?: string | null;
 }
 
-// Interfaces and their method signatures are deliberately NOT extracted.
+// TypeScript interface method signatures are deliberately NOT extracted.
+// Java grammars expose interface members as method_declaration nodes, so they
+// remain indexed with their interface container; this comment must not imply a
+// cross-language guarantee the AST does not provide.
 //
 // It looks like they should be: bb has 153 classes against 12 981 functions,
 // only 2.1% of type annotations name a class, and 21.7% of ambiguous calls do
@@ -170,6 +187,7 @@ export async function extractFile(
   const calls: CallSite[] = [];
   const imports: ImportBinding[] = [];
   const types: TypeBinding[] = [];
+  const typeRelations: TypeRelation[] = [];
 
   /**
    * Depth at which the walk stops descending.
@@ -216,7 +234,10 @@ export async function extractFile(
           tokens: estimateTokens(node),
         });
         nextEnclosing = id;
-        if (definition.kind === "class") nextContainer = definition.name;
+        if (definition.kind === "class") {
+          nextContainer = definition.name;
+          typeRelations.push(...declaredTypeRelations(node, language, file, definition.name));
+        }
     }
 
     collectTypeBindings(node, language, file, nextContainer, types);
@@ -273,7 +294,81 @@ export async function extractFile(
 
   visit(root, null, null, 0);
 
-  return { file, symbols, calls, imports, types, truncated };
+  return { file, symbols, calls, imports, types, typeRelations, truncated };
+}
+
+function declaredTypeRelations(
+  node: AstNode,
+  language: LanguageId,
+  file: string,
+  subtype: string,
+): readonly TypeRelation[] {
+  // Heritage nodes have a grammar-level boundary around `extends` and
+  // `implements`. Reading their direct AST children avoids confusing generic
+  // constraints, type arguments, or Python class keywords with supertypes.
+  const relations: TypeRelation[] = [];
+  const children = (parent: AstNode): AstNode[] =>
+    Array.from({ length: parent.namedChildCount }, (_, index) => parent.namedChild(index))
+      .filter((child): child is AstNode => child !== null);
+  const child = (parent: AstNode, type: string): AstNode | undefined =>
+    children(parent).find((candidate) => candidate.type === type);
+  const typeName = (candidate: AstNode): string | undefined => {
+    if (["identifier", "type_identifier", "scoped_type_identifier", "property_identifier", "field_identifier"].includes(candidate.type)) {
+      return candidate.text.split(".").at(-1);
+    }
+    if (["attribute", "member_expression"].includes(candidate.type)) {
+      const terminal = children(candidate).at(-1);
+      return terminal === undefined ? undefined : typeName(terminal);
+    }
+    return children(candidate).map(typeName).find((name): name is string => name !== undefined);
+  };
+  const add = (candidate: AstNode, kind: TypeRelation["kind"]) => {
+    const supertype = typeName(candidate);
+    if (supertype !== undefined) relations.push({ file, subtype, supertype, kind });
+  };
+  const addList = (candidate: AstNode, kind: TypeRelation["kind"]) => {
+    if (candidate.type === "type_list") {
+      for (const item of children(candidate)) add(item, kind);
+    } else {
+      add(candidate, kind);
+    }
+  };
+
+  if (language === "python") {
+    const bases = child(node, "argument_list");
+    for (const base of bases === undefined ? [] : children(bases)) {
+      if (["keyword_argument", "dictionary_splat", "list_splat"].includes(base.type)) continue;
+      add(base, "extends");
+    }
+    return relations;
+  }
+
+  const heritage = child(node, "class_heritage");
+  if (heritage !== undefined) {
+    for (const clause of children(heritage)) {
+      if (clause.type === "extends_clause") {
+        const base = children(clause)[0];
+        if (base !== undefined) add(base, "extends");
+      }
+      if (clause.type === "implements_clause") {
+        for (const implementation of children(clause)) add(implementation, "implements");
+      }
+    }
+  }
+  const interfaceExtends = child(node, "extends_type_clause");
+  if (interfaceExtends !== undefined) {
+    for (const supertype of children(interfaceExtends)) addList(supertype, "extends");
+  }
+  for (const supertype of children(node)) {
+    if (supertype.type === "superclass") add(supertype, "extends");
+    if (["super_interfaces", "interfaces"].includes(supertype.type)) {
+      for (const implementation of children(supertype)) addList(implementation, "implements");
+    }
+    if (supertype.type === "extends_interfaces") {
+      for (const implementation of children(supertype)) addList(implementation, "extends");
+    }
+  }
+  return relations;
 }
 
 function symbolId(
@@ -288,6 +383,10 @@ function symbolId(
 }
 
 function definitionFor(node: AstNode, language: LanguageId, container: string | null): Definition | null {
+  if (language === "python" && node.type === "function_definition" && container !== null) {
+    const name = nameOf(node);
+    return name === null ? null : { kind: "method", name };
+  }
   const bound = functionBinding(node);
   const existingKind = DEFINITION_TYPES.get(node.type) ?? bound?.kind;
   const existingName = bound?.name ?? nameOf(node);

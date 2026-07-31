@@ -87,10 +87,17 @@ export interface FileImport {
   readonly symbolId: string;
 }
 
+export interface ResolvedTypeRelation {
+  readonly subtype: string;
+  readonly supertype: string;
+  readonly kind: "extends" | "implements" | "overrides";
+}
+
 export interface ResolutionResult {
   readonly symbols: readonly CodeSymbol[];
   readonly edges: readonly ResolvedEdge[];
   readonly fileImports: readonly FileImport[];
+  readonly typeRelations: readonly ResolvedTypeRelation[];
   readonly stats: ResolutionStats;
   /**
    * Capture-recapture input: for each distinct edge any strategy proposed, how
@@ -219,11 +226,13 @@ export function resolveProject(files: readonly FileExtraction[]): ResolutionResu
   // population would estimate the richness of a different thing.
   const importEdges = buildImportEdges(files, symbolsByFile, knownFiles);
   const fileImports = collectFileImports(files, symbolsByFile, knownFiles);
+  const typeRelations = resolveTypeRelations(files, symbols);
 
   return {
     symbols,
     edges: [...edges, ...importEdges],
     fileImports,
+    typeRelations,
     stats: {
       resolved: edges.length,
       unknown,
@@ -233,6 +242,51 @@ export function resolveProject(files: readonly FileExtraction[]): ResolutionResu
     },
     captureCounts: [...captures.values()].map((trapped) => trapped.size),
   };
+}
+
+function resolveTypeRelations(
+  files: readonly FileExtraction[],
+  symbols: readonly CodeSymbol[],
+): readonly ResolvedTypeRelation[] {
+  const classesByName = new Map<string, CodeSymbol[]>();
+  const classesByFileName = new Map<string, CodeSymbol[]>();
+  for (const symbol of symbols) {
+    if (symbol.kind === "class") {
+      const named = classesByName.get(symbol.name) ?? [];
+      named.push(symbol);
+      classesByName.set(symbol.name, named);
+      const local = classesByFileName.get(`${symbol.file}\u0000${symbol.name}`) ?? [];
+      local.push(symbol);
+      classesByFileName.set(`${symbol.file}\u0000${symbol.name}`, local);
+    }
+  }
+  const exact = (candidates: readonly CodeSymbol[]): CodeSymbol | null => candidates.length === 1 ? candidates[0]! : null;
+  const resolveClass = (file: string, name: string): CodeSymbol | null =>
+    exact(classesByFileName.get(`${file}\u0000${name}`) ?? []) ?? exact(classesByName.get(name) ?? []);
+  const methodsByClassId = new Map<string, CodeSymbol[]>();
+  for (const symbol of symbols) {
+    if (symbol.kind !== "method" || symbol.container === null) continue;
+    const container = resolveClass(symbol.file, symbol.container);
+    if (container === null) continue;
+    const methods = methodsByClassId.get(container.id) ?? [];
+    methods.push(symbol);
+    methodsByClassId.set(container.id, methods);
+  }
+  const result: ResolvedTypeRelation[] = [];
+  for (const file of files) {
+    for (const relation of file.typeRelations) {
+      const subtype = resolveClass(relation.file, relation.subtype);
+      const supertype = resolveClass(relation.file, relation.supertype);
+      if (subtype === null || supertype === null || subtype.id === supertype.id) continue;
+      result.push({ subtype: subtype.id, supertype: supertype.id, kind: relation.kind });
+      if (relation.kind !== "extends") continue;
+      for (const method of methodsByClassId.get(subtype.id) ?? []) {
+        const overridden = (methodsByClassId.get(supertype.id) ?? []).filter((candidate) => candidate.name === method.name);
+        if (overridden.length === 1) result.push({ subtype: method.id, supertype: overridden[0]!.id, kind: "overrides" });
+      }
+    }
+  }
+  return result;
 }
 
 /**

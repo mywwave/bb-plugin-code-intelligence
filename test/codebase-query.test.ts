@@ -218,4 +218,40 @@ describe("codebase query", () => {
     ]);
     expect(result.timingMs.total).toBeGreaterThanOrEqual(0);
   });
+
+  it("keeps declared hierarchy and overrides separate from call relations", async () => {
+    const root = await fixture({
+      "src/types.ts": "class Base { run() {} }\nclass Worker extends Base { run() {} }\n",
+    });
+    const base = { ...symbol("src/types.ts#Base", "Base", "src/types.ts", "base type"), kind: "class" as const, container: null };
+    const worker = { ...symbol("src/types.ts#Worker", "Worker", "src/types.ts", "worker type"), kind: "class" as const, container: null, startLine: 1 };
+    const baseRun = { ...symbol("src/types.ts#Base.run", "run", "src/types.ts", "base run"), kind: "method" as const, container: "Base" };
+    const workerRun = { ...symbol("src/types.ts#Worker.run", "run", "src/types.ts", "worker run"), kind: "method" as const, container: "Worker", startLine: 1 };
+    const symbols = [base, worker, baseRun, workerRun];
+    const bodies = new Map(symbols.map((entry) => [entry.id, entry.body]));
+    const index = buildIndex({
+      symbols,
+      edges: [],
+      typeRelations: [
+        { subtype: worker.id, supertype: base.id, kind: "extends" },
+        { subtype: workerRun.id, supertype: baseRun.id, kind: "overrides" },
+      ],
+      ambiguousCalls: 0,
+    } satisfies IndexInput, (entry) => bodies.get(entry.id) ?? "", 0.8, true);
+
+    const result = await queryCodebase(root, index, {
+      query: "Trace `Worker` hierarchy.",
+      mode: "trace",
+      budgetTokens: 160,
+    });
+
+    expect(result.trace?.symbols).toEqual([
+      expect.objectContaining({
+        id: worker.id,
+        callers: [],
+        callees: [],
+        supertypes: [expect.objectContaining({ id: base.id, via: "extends" })],
+      }),
+    ]);
+  });
 });
