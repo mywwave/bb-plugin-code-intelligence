@@ -17,6 +17,40 @@ function index() {
 }
 
 describe("lookupSymbols", () => {
+  it("retains same-named declarations when their source identities differ", () => {
+    const topLevelDecode = {
+      id: "mapstructure.go#Decode@306:1",
+      name: "Decode",
+      kind: "function" as const,
+      container: null,
+      file: "mapstructure.go",
+      startLine: 305,
+      endLine: 314,
+      tokens: 20,
+    };
+    const methodDecode = {
+      id: "mapstructure.go#Decoder.Decode@416:1",
+      name: "Decode",
+      kind: "method" as const,
+      container: "Decoder",
+      file: "mapstructure.go",
+      startLine: 415,
+      endLine: 420,
+      tokens: 20,
+    };
+    const graph = buildIndex({
+      symbols: [topLevelDecode, methodDecode],
+      edges: [],
+      ambiguousCalls: 0,
+    }, () => "", 0.6, true);
+
+    expect(graph.indexById.size).toBe(2);
+    expect(lookupSymbols(graph, [topLevelDecode.id, methodDecode.id]).targets).toEqual([
+      { id: topLevelDecode.id, name: "Decode", file: "mapstructure.go", line: 306, kind: "function" },
+      { id: methodDecode.id, name: "Decode", file: "mapstructure.go", line: 416, kind: "method" },
+    ]);
+  });
+
   it("refuses an overloaded bare name and supplies exact symbols to choose from", () => {
     const report = lookupSymbols(index(), ["charge"]);
 
