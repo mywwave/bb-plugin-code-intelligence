@@ -250,7 +250,6 @@ function resolveTypeRelations(
 ): readonly ResolvedTypeRelation[] {
   const classesByName = new Map<string, CodeSymbol[]>();
   const classesByFileName = new Map<string, CodeSymbol[]>();
-  const methodsByContainer = new Map<string, CodeSymbol[]>();
   for (const symbol of symbols) {
     if (symbol.kind === "class") {
       const named = classesByName.get(symbol.name) ?? [];
@@ -260,15 +259,19 @@ function resolveTypeRelations(
       local.push(symbol);
       classesByFileName.set(`${symbol.file}\u0000${symbol.name}`, local);
     }
-    if (symbol.kind === "method" && symbol.container !== null) {
-      const methods = methodsByContainer.get(symbol.container) ?? [];
-      methods.push(symbol);
-      methodsByContainer.set(symbol.container, methods);
-    }
   }
   const exact = (candidates: readonly CodeSymbol[]): CodeSymbol | null => candidates.length === 1 ? candidates[0]! : null;
   const resolveClass = (file: string, name: string): CodeSymbol | null =>
     exact(classesByFileName.get(`${file}\u0000${name}`) ?? []) ?? exact(classesByName.get(name) ?? []);
+  const methodsByClassId = new Map<string, CodeSymbol[]>();
+  for (const symbol of symbols) {
+    if (symbol.kind !== "method" || symbol.container === null) continue;
+    const container = resolveClass(symbol.file, symbol.container);
+    if (container === null) continue;
+    const methods = methodsByClassId.get(container.id) ?? [];
+    methods.push(symbol);
+    methodsByClassId.set(container.id, methods);
+  }
   const result: ResolvedTypeRelation[] = [];
   for (const file of files) {
     for (const relation of file.typeRelations) {
@@ -277,8 +280,8 @@ function resolveTypeRelations(
       if (subtype === null || supertype === null || subtype.id === supertype.id) continue;
       result.push({ subtype: subtype.id, supertype: supertype.id, kind: relation.kind });
       if (relation.kind !== "extends") continue;
-      for (const method of methodsByContainer.get(subtype.name) ?? []) {
-        const overridden = (methodsByContainer.get(supertype.name) ?? []).filter((candidate) => candidate.name === method.name);
+      for (const method of methodsByClassId.get(subtype.id) ?? []) {
+        const overridden = (methodsByClassId.get(supertype.id) ?? []).filter((candidate) => candidate.name === method.name);
         if (overridden.length === 1) result.push({ subtype: method.id, supertype: overridden[0]!.id, kind: "overrides" });
       }
     }

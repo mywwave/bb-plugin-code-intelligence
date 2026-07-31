@@ -116,7 +116,10 @@ interface Definition {
   readonly container?: string | null;
 }
 
-// Interfaces and their method signatures are deliberately NOT extracted.
+// TypeScript interface method signatures are deliberately NOT extracted.
+// Java grammars expose interface members as method_declaration nodes, so they
+// remain indexed with their interface container; this comment must not imply a
+// cross-language guarantee the AST does not provide.
 //
 // It looks like they should be: bb has 153 classes against 12 981 functions,
 // only 2.1% of type annotations name a class, and 21.7% of ambiguous calls do
@@ -300,31 +303,62 @@ function declaredTypeRelations(
   file: string,
   subtype: string,
 ): readonly TypeRelation[] {
-  // The declaration head is a direct syntactic fact. Keep it separate from
-  // call resolution: an `extends` clause proves a hierarchy relation, not that
-  // either type calls the other.
-  const head = node.text.split(/[\n{]/, 1)[0] ?? "";
-  const names = (text: string): string[] => [...text.matchAll(/[A-Za-z_$][\w$]*/g)]
-    .map((match) => match[0]!)
-    .map((name) => name.split(".").at(-1)!)
-    .filter((name) => name !== "extends" && name !== "implements");
+  // Heritage nodes have a grammar-level boundary around `extends` and
+  // `implements`. Reading their direct AST children avoids confusing generic
+  // constraints, type arguments, or Python class keywords with supertypes.
   const relations: TypeRelation[] = [];
+  const children = (parent: AstNode): AstNode[] =>
+    Array.from({ length: parent.namedChildCount }, (_, index) => parent.namedChild(index))
+      .filter((child): child is AstNode => child !== null);
+  const child = (parent: AstNode, type: string): AstNode | undefined =>
+    children(parent).find((candidate) => candidate.type === type);
+  const typeName = (candidate: AstNode): string | undefined => {
+    if (["identifier", "type_identifier", "scoped_type_identifier"].includes(candidate.type)) {
+      return candidate.text.split(".").at(-1);
+    }
+    return children(candidate).map(typeName).find((name): name is string => name !== undefined);
+  };
+  const add = (candidate: AstNode, kind: TypeRelation["kind"]) => {
+    const supertype = typeName(candidate);
+    if (supertype !== undefined) relations.push({ file, subtype, supertype, kind });
+  };
+  const addList = (candidate: AstNode, kind: TypeRelation["kind"]) => {
+    if (candidate.type === "type_list") {
+      for (const item of children(candidate)) add(item, kind);
+    } else {
+      add(candidate, kind);
+    }
+  };
 
   if (language === "python") {
-    const bases = head.match(/^\s*class\s+[A-Za-z_]\w*\s*\(([^)]*)\)/)?.[1] ?? "";
-    for (const supertype of names(bases)) relations.push({ file, subtype, supertype, kind: "extends" });
+    const bases = child(node, "argument_list");
+    for (const base of bases === undefined ? [] : children(bases)) {
+      if (["keyword_argument", "dictionary_splat", "list_splat"].includes(base.type)) continue;
+      add(base, "extends");
+    }
     return relations;
   }
 
-  if (!["typescript", "tsx", "javascript", "java"].includes(language)) return relations;
-  const extendsText = head.match(/\bextends\s+([^\s,{]+)/)?.[1];
-  if (extendsText !== undefined) {
-    const supertype = names(extendsText)[0];
-    if (supertype !== undefined) relations.push({ file, subtype, supertype, kind: "extends" });
+  const heritage = child(node, "class_heritage");
+  if (heritage !== undefined) {
+    for (const clause of children(heritage)) {
+      if (clause.type === "extends_clause") {
+        const base = children(clause)[0];
+        if (base !== undefined) add(base, "extends");
+      }
+      if (clause.type === "implements_clause") {
+        for (const implementation of children(clause)) add(implementation, "implements");
+      }
+    }
   }
-  const implementsText = head.match(/\bimplements\s+(.+)$/)?.[1] ?? "";
-  for (const supertype of names(implementsText)) {
-    relations.push({ file, subtype, supertype, kind: "implements" });
+  for (const supertype of children(node)) {
+    if (supertype.type === "superclass") add(supertype, "extends");
+    if (["super_interfaces", "interfaces"].includes(supertype.type)) {
+      for (const implementation of children(supertype)) addList(implementation, "implements");
+    }
+    if (supertype.type === "extends_interfaces") {
+      for (const implementation of children(supertype)) addList(implementation, "extends");
+    }
   }
   return relations;
 }

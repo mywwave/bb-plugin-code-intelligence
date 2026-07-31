@@ -28,6 +28,7 @@ function fakeStore(): SnapshotStore & { rows: Map<string, Record<string, unknown
             version,
             symbols,
             edges,
+            typeRelations,
             extractions,
             fileHashes,
             ambiguous,
@@ -39,6 +40,7 @@ function fakeStore(): SnapshotStore & { rows: Map<string, Record<string, unknown
             version,
             symbols,
             edges,
+            type_relations: typeRelations,
             extractions,
             file_hashes: fileHashes,
             ambiguous_calls: ambiguous,
@@ -72,16 +74,17 @@ const symbol = {
 const fileExtraction: FileExtraction = {
   file: "src/a.ts",
   symbols: [symbol],
-    calls: [],
-    imports: [],
-    types: [],
-    typeRelations: [],
+  calls: [],
+  imports: [],
+  types: [],
+  typeRelations: [],
 };
 
 function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
   return {
     symbols: [symbol],
     edges: [{ from: "src/a.ts#f", to: "src/b.ts#g", weight: 0.9, strategy: "sameFile" }],
+    typeRelations: [],
     extractions: [fileExtraction],
     fileHashes: new Map([["src/a.ts", "aaa"], ["src/b.ts", "bbb"]]),
     ambiguousCalls: 3,
@@ -91,6 +94,11 @@ function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
     ...overrides,
   };
 }
+
+const hierarchySnapshot = (): Snapshot => ({
+  ...snapshot(),
+  typeRelations: [{ subtype: "src/a.ts#Child@1:1", supertype: "src/a.ts#Base@2:1", kind: "extends" }],
+});
 
 describe("snapshot round trip", () => {
   it("restores what was saved", () => {
@@ -112,6 +120,15 @@ describe("snapshot round trip", () => {
     saveSnapshot(db, "/repo", snapshot({ ambiguousCalls: 99 }));
 
     expect(loadSnapshot(db, "/repo")!.ambiguousCalls).toBe(99);
+  });
+
+  it("restores resolved hierarchy facts without recomputing extraction", () => {
+    const db = fakeStore();
+    saveSnapshot(db, "/repo", hierarchySnapshot());
+
+    expect(loadSnapshot(db, "/repo")!.typeRelations).toEqual([
+      { subtype: "src/a.ts#Child@1:1", supertype: "src/a.ts#Base@2:1", kind: "extends" },
+    ]);
   });
 
   it("keeps roots independent", () => {

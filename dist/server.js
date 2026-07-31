@@ -15383,23 +15383,54 @@ async function extractFile(file2, language, source) {
   return { file: file2, symbols, calls, imports, types, typeRelations, truncated: truncated2 };
 }
 function declaredTypeRelations(node, language, file2, subtype) {
-  const head = node.text.split(/[\n{]/, 1)[0] ?? "";
-  const names = (text) => [...text.matchAll(/[A-Za-z_$][\w$]*/g)].map((match) => match[0]).map((name) => name.split(".").at(-1)).filter((name) => name !== "extends" && name !== "implements");
   const relations = [];
+  const children = (parent) => Array.from({ length: parent.namedChildCount }, (_, index) => parent.namedChild(index)).filter((child2) => child2 !== null);
+  const child = (parent, type) => children(parent).find((candidate) => candidate.type === type);
+  const typeName = (candidate) => {
+    if (["identifier", "type_identifier", "scoped_type_identifier"].includes(candidate.type)) {
+      return candidate.text.split(".").at(-1);
+    }
+    return children(candidate).map(typeName).find((name) => name !== void 0);
+  };
+  const add = (candidate, kind) => {
+    const supertype = typeName(candidate);
+    if (supertype !== void 0) relations.push({ file: file2, subtype, supertype, kind });
+  };
+  const addList = (candidate, kind) => {
+    if (candidate.type === "type_list") {
+      for (const item of children(candidate)) add(item, kind);
+    } else {
+      add(candidate, kind);
+    }
+  };
   if (language === "python") {
-    const bases = head.match(/^\s*class\s+[A-Za-z_]\w*\s*\(([^)]*)\)/)?.[1] ?? "";
-    for (const supertype of names(bases)) relations.push({ file: file2, subtype, supertype, kind: "extends" });
+    const bases = child(node, "argument_list");
+    for (const base of bases === void 0 ? [] : children(bases)) {
+      if (["keyword_argument", "dictionary_splat", "list_splat"].includes(base.type)) continue;
+      add(base, "extends");
+    }
     return relations;
   }
-  if (!["typescript", "tsx", "javascript", "java"].includes(language)) return relations;
-  const extendsText = head.match(/\bextends\s+([^\s,{]+)/)?.[1];
-  if (extendsText !== void 0) {
-    const supertype = names(extendsText)[0];
-    if (supertype !== void 0) relations.push({ file: file2, subtype, supertype, kind: "extends" });
+  const heritage = child(node, "class_heritage");
+  if (heritage !== void 0) {
+    for (const clause of children(heritage)) {
+      if (clause.type === "extends_clause") {
+        const base = children(clause)[0];
+        if (base !== void 0) add(base, "extends");
+      }
+      if (clause.type === "implements_clause") {
+        for (const implementation of children(clause)) add(implementation, "implements");
+      }
+    }
   }
-  const implementsText = head.match(/\bimplements\s+(.+)$/)?.[1] ?? "";
-  for (const supertype of names(implementsText)) {
-    relations.push({ file: file2, subtype, supertype, kind: "implements" });
+  for (const supertype of children(node)) {
+    if (supertype.type === "superclass") add(supertype, "extends");
+    if (["super_interfaces", "interfaces"].includes(supertype.type)) {
+      for (const implementation of children(supertype)) addList(implementation, "implements");
+    }
+    if (supertype.type === "extends_interfaces") {
+      for (const implementation of children(supertype)) addList(implementation, "extends");
+    }
   }
   return relations;
 }
@@ -15773,7 +15804,6 @@ function resolveProject(files) {
 function resolveTypeRelations(files, symbols) {
   const classesByName = /* @__PURE__ */ new Map();
   const classesByFileName = /* @__PURE__ */ new Map();
-  const methodsByContainer = /* @__PURE__ */ new Map();
   for (const symbol2 of symbols) {
     if (symbol2.kind === "class") {
       const named = classesByName.get(symbol2.name) ?? [];
@@ -15783,14 +15813,18 @@ function resolveTypeRelations(files, symbols) {
       local.push(symbol2);
       classesByFileName.set(`${symbol2.file}\0${symbol2.name}`, local);
     }
-    if (symbol2.kind === "method" && symbol2.container !== null) {
-      const methods = methodsByContainer.get(symbol2.container) ?? [];
-      methods.push(symbol2);
-      methodsByContainer.set(symbol2.container, methods);
-    }
   }
   const exact = (candidates) => candidates.length === 1 ? candidates[0] : null;
   const resolveClass = (file2, name) => exact(classesByFileName.get(`${file2}\0${name}`) ?? []) ?? exact(classesByName.get(name) ?? []);
+  const methodsByClassId = /* @__PURE__ */ new Map();
+  for (const symbol2 of symbols) {
+    if (symbol2.kind !== "method" || symbol2.container === null) continue;
+    const container = resolveClass(symbol2.file, symbol2.container);
+    if (container === null) continue;
+    const methods = methodsByClassId.get(container.id) ?? [];
+    methods.push(symbol2);
+    methodsByClassId.set(container.id, methods);
+  }
   const result = [];
   for (const file2 of files) {
     for (const relation2 of file2.typeRelations) {
@@ -15799,8 +15833,8 @@ function resolveTypeRelations(files, symbols) {
       if (subtype === null || supertype === null || subtype.id === supertype.id) continue;
       result.push({ subtype: subtype.id, supertype: supertype.id, kind: relation2.kind });
       if (relation2.kind !== "extends") continue;
-      for (const method of methodsByContainer.get(subtype.name) ?? []) {
-        const overridden = (methodsByContainer.get(supertype.name) ?? []).filter((candidate) => candidate.name === method.name);
+      for (const method of methodsByClassId.get(subtype.id) ?? []) {
+        const overridden = (methodsByClassId.get(supertype.id) ?? []).filter((candidate) => candidate.name === method.name);
         if (overridden.length === 1) result.push({ subtype: method.id, supertype: overridden[0].id, kind: "overrides" });
       }
     }
@@ -17915,7 +17949,7 @@ function mergeCodeGraphConfig(current, patch) {
 // src/persistence.ts
 import { createHash } from "node:crypto";
 import { gunzipSync, gzipSync } from "node:zlib";
-var STORAGE_VERSION = 4;
+var STORAGE_VERSION = 5;
 var SNAPSHOT_VERSION = STORAGE_VERSION * 100 + EXTRACTION_VERSION;
 var PERSISTENCE_MIGRATIONS = [
   `CREATE TABLE IF NOT EXISTS snapshots (
@@ -17929,7 +17963,8 @@ var PERSISTENCE_MIGRATIONS = [
      completeness_reliable INTEGER NOT NULL,
      built_at_ms INTEGER NOT NULL
    )`,
-  `ALTER TABLE snapshots ADD COLUMN extractions BLOB`
+  `ALTER TABLE snapshots ADD COLUMN extractions BLOB`,
+  `ALTER TABLE snapshots ADD COLUMN type_relations BLOB`
 ];
 function pack(value) {
   return gzipSync(Buffer.from(JSON.stringify(value), "utf8"));
@@ -17944,13 +17979,14 @@ function hashContent(source) {
 function saveSnapshot(db, root, snapshot) {
   db.prepare(
     `INSERT INTO snapshots
-       (root, version, symbols, edges, extractions, file_hashes, ambiguous_calls,
+       (root, version, symbols, edges, type_relations, extractions, file_hashes, ambiguous_calls,
         completeness, completeness_reliable, built_at_ms)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(root) DO UPDATE SET
        version = excluded.version,
        symbols = excluded.symbols,
        edges = excluded.edges,
+       type_relations = excluded.type_relations,
        extractions = excluded.extractions,
        file_hashes = excluded.file_hashes,
        ambiguous_calls = excluded.ambiguous_calls,
@@ -17962,6 +17998,7 @@ function saveSnapshot(db, root, snapshot) {
     SNAPSHOT_VERSION,
     pack(snapshot.symbols),
     pack(snapshot.edges),
+    pack(snapshot.typeRelations),
     pack(snapshot.extractions),
     pack([...snapshot.fileHashes]),
     snapshot.ambiguousCalls,
@@ -17977,6 +18014,7 @@ function loadSnapshot(db, root) {
     return {
       symbols: unpack(row.symbols),
       edges: unpack(row.edges),
+      typeRelations: unpack(row.type_relations),
       extractions: unpack(row.extractions),
       fileHashes: new Map(unpack(row.file_hashes)),
       ambiguousCalls: row.ambiguous_calls,
@@ -18020,6 +18058,7 @@ function exportSnapshot(snapshot) {
     version: SNAPSHOT_VERSION,
     symbols: snapshot.symbols,
     edges: snapshot.edges,
+    typeRelations: snapshot.typeRelations,
     extractions: snapshot.extractions,
     fileHashes: [...snapshot.fileHashes],
     ambiguousCalls: snapshot.ambiguousCalls,
@@ -18035,6 +18074,7 @@ function importSnapshot(blob) {
     return {
       symbols: parsed.symbols,
       edges: parsed.edges,
+      typeRelations: parsed.typeRelations,
       extractions: parsed.extractions,
       fileHashes: new Map(parsed.fileHashes),
       ambiguousCalls: parsed.ambiguousCalls,
@@ -18404,7 +18444,7 @@ async function plugin(bb) {
         scan = {
           symbols: stored.symbols,
           edges: stored.edges,
-          typeRelations: resolveProject(extractions).typeRelations,
+          typeRelations: stored.typeRelations,
           ambiguousCalls: stored.ambiguousCalls
         };
         mode = "restored";
@@ -18466,6 +18506,7 @@ async function plugin(bb) {
     const snapshot = {
       symbols: scan.symbols,
       edges: scan.edges,
+      typeRelations: scan.typeRelations ?? [],
       extractions,
       fileHashes: state.fileHashes,
       ambiguousCalls: scan.ambiguousCalls,

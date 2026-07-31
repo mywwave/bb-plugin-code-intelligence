@@ -102,6 +102,48 @@ describe("extractFile", () => {
     expect(typescript.calls).toEqual([]);
   });
 
+  it("reads only AST heritage clauses across generic and wrapped type headers", async () => {
+    const typescript = await ts(
+      "src/types.ts",
+      [
+        "class Generic<T extends Constraint> extends Base implements Repository<User>, Serializable { run() {} }",
+        "class Wrapped",
+        "  extends Base",
+        "  implements Reader<User> { read() {} }",
+      ].join("\n"),
+    );
+    const python = await extractFile(
+      "pkg/types.py",
+      "python",
+      "class Child(\n    Base,\n    metaclass=ABCMeta,\n):\n    pass\n",
+    );
+    const java = await extractFile(
+      "src/Types.java",
+      "java",
+      [
+        "class JavaChild extends JavaBase implements Reader, Repository<User> {}",
+        "interface ChildReader extends Reader {}",
+      ].join("\n"),
+    );
+
+    expect(typescript.typeRelations).toEqual([
+      { file: "src/types.ts", subtype: "Generic", supertype: "Base", kind: "extends" },
+      { file: "src/types.ts", subtype: "Generic", supertype: "Repository", kind: "implements" },
+      { file: "src/types.ts", subtype: "Generic", supertype: "Serializable", kind: "implements" },
+      { file: "src/types.ts", subtype: "Wrapped", supertype: "Base", kind: "extends" },
+      { file: "src/types.ts", subtype: "Wrapped", supertype: "Reader", kind: "implements" },
+    ]);
+    expect(python.typeRelations).toEqual([
+      { file: "pkg/types.py", subtype: "Child", supertype: "Base", kind: "extends" },
+    ]);
+    expect(java.typeRelations).toEqual([
+      { file: "src/Types.java", subtype: "JavaChild", supertype: "JavaBase", kind: "extends" },
+      { file: "src/Types.java", subtype: "JavaChild", supertype: "Reader", kind: "implements" },
+      { file: "src/Types.java", subtype: "JavaChild", supertype: "Repository", kind: "implements" },
+      { file: "src/Types.java", subtype: "ChildReader", supertype: "Reader", kind: "extends" },
+    ]);
+  });
+
   it("resolves hierarchy only when both declared types are unambiguous", async () => {
     const files = [await ts(
       "src/types.ts",
@@ -118,6 +160,22 @@ describe("extractFile", () => {
       expect.objectContaining({ kind: "implements", subtype: expect.stringContaining("#Worker@"), supertype: expect.stringContaining("#Reader@") }),
       expect.objectContaining({ kind: "overrides", subtype: expect.stringContaining("#Worker.run@"), supertype: expect.stringContaining("#Base.run@") }),
     ]));
+  });
+
+  it("derives overrides from the resolved type identities rather than class names", async () => {
+    const files = await Promise.all([
+      ts("a/base.ts", "class Base { run() {} }"),
+      ts("a/child.ts", "class Child extends Base {}"),
+      ts("b/child.ts", "class Child { run() {} }"),
+    ]);
+
+    const relations = resolveProject(files).typeRelations;
+    expect(relations).toContainEqual(expect.objectContaining({
+      kind: "extends",
+      subtype: expect.stringContaining("a/child.ts#Child@"),
+      supertype: expect.stringContaining("a/base.ts#Base@"),
+    }));
+    expect(relations.filter((relation) => relation.kind === "overrides")).toEqual([]);
   });
 
   it("extracts symbols, calls, imports, and direct type facts from core languages", async () => {
