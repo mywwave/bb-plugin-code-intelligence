@@ -16940,7 +16940,10 @@ function sourceMatcher(options) {
   const wordExpression = new RegExp(`\\b(?:${expression.source})\\b`, flags);
   return (line) => wordExpression.test(line);
 }
-async function instantGrepSources(sources, options) {
+function prepareInstantGrepSources(sources) {
+  return [...sources.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([file2, source]) => ({ file: file2, lines: source.split("\n") }));
+}
+async function instantGrepPreparedSources(sources, options) {
   validateOptions(options);
   const limit = normalizedLimit(options.limit);
   const offset = normalizedNonNegative(options.offset, "offset", 1e5);
@@ -16950,10 +16953,9 @@ async function instantGrepSources(sources, options) {
   const files = [];
   const counts = [];
   const candidates = [];
-  for (const [file2, source] of [...sources.entries()].sort(([left], [right]) => left.localeCompare(right))) {
+  for (const { file: file2, lines } of sources) {
     if (options.signal?.aborted) throw new Error("instant_grep aborted");
     if (!globMatches(file2, options.glob)) continue;
-    const lines = source.split("\n");
     const lineIndexes = lines.flatMap((line, index) => matchesLine(line) ? [index] : []);
     if (lineIndexes.length === 0) continue;
     if ((options.outputMode ?? "content") === "files_with_matches") {
@@ -18123,6 +18125,7 @@ async function plugin(bb) {
   const indexingRoots = /* @__PURE__ */ new Set();
   const remoteWorkspaces = /* @__PURE__ */ new Map();
   const remoteSources = /* @__PURE__ */ new Map();
+  const preparedRemoteSources = /* @__PURE__ */ new Map();
   const pending = /* @__PURE__ */ new Map();
   const throwIfAborted = (signal) => {
     if (signal?.aborted) throw new Error("indexing aborted");
@@ -18178,6 +18181,7 @@ async function plugin(bb) {
     };
     await Promise.all(Array.from({ length: Math.min(16, files.length) }, readNext));
     remoteSources.set(root, sources);
+    preparedRemoteSources.set(root, prepareInstantGrepSources(sources));
     return { sources, fileHashes };
   }
   async function readRepositoryState(root, signal) {
@@ -18421,10 +18425,11 @@ async function plugin(bb) {
   async function searchExact(root, options) {
     if (!isRemoteRoot(root)) return instantGrepBatch(root, options);
     const sources = remoteSources.get(root);
-    if (sources === void 0) throw new Error(`remote workspace is not indexed: ${rootLabel(root)}`);
+    const prepared = preparedRemoteSources.get(root);
+    if (sources === void 0 || prepared === void 0) throw new Error(`remote workspace is not indexed: ${rootLabel(root)}`);
     return Promise.all(options.map(async (option) => ({
       pattern: option.pattern,
-      ...await instantGrepSources(sources, option)
+      ...await instantGrepPreparedSources(prepared, option)
     })));
   }
   async function recordFeedbackAnswer(input) {

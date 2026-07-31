@@ -32,7 +32,13 @@ import {
 } from "./src/retrieval.js";
 import { buildInstruction } from "./src/instruction.js";
 import { analyzeImpact } from "./src/impact.js";
-import { instantGrepBatch, instantGrepSources, type InstantGrepOptions } from "./src/instant-grep.js";
+import {
+  instantGrepBatch,
+  instantGrepPreparedSources,
+  prepareInstantGrepSources,
+  type InstantGrepOptions,
+  type PreparedInstantGrepSource,
+} from "./src/instant-grep.js";
 import { queryCodebase } from "./src/codebase-query.js";
 import {
   buildRepositoryContext,
@@ -185,6 +191,8 @@ export default async function plugin(bb: BbPluginApi) {
   }>();
   /** Last complete host-file snapshot for a remote workspace. */
   const remoteSources = new Map<string, ReadonlyMap<string, string>>();
+  /** Sorted and line-split alongside each remote snapshot for the search hot path. */
+  const preparedRemoteSources = new Map<string, readonly PreparedInstantGrepSource[]>();
 
   /** Every retrieval answer awaiting a per-surface outcome, keyed by thread. */
   const pending = new Map<string, PendingAnswer[]>();
@@ -259,6 +267,7 @@ export default async function plugin(bb: BbPluginApi) {
     };
     await Promise.all(Array.from({ length: Math.min(16, files.length) }, readNext));
     remoteSources.set(root, sources);
+    preparedRemoteSources.set(root, prepareInstantGrepSources(sources));
     return { sources, fileHashes };
   }
 
@@ -605,10 +614,11 @@ export default async function plugin(bb: BbPluginApi) {
     // Keeping the fallback explicit gives an actionable failure rather than
     // accidentally running ripgrep against the BB server's similarly named path.
     const sources = remoteSources.get(root);
-    if (sources === undefined) throw new Error(`remote workspace is not indexed: ${rootLabel(root)}`);
+    const prepared = preparedRemoteSources.get(root);
+    if (sources === undefined || prepared === undefined) throw new Error(`remote workspace is not indexed: ${rootLabel(root)}`);
     return Promise.all(options.map(async (option) => ({
       pattern: option.pattern,
-      ...(await instantGrepSources(sources, option)),
+      ...(await instantGrepPreparedSources(prepared, option)),
     })));
   }
 
