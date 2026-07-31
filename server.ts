@@ -53,6 +53,11 @@ import { IndexRegistry, type IndexedRoot } from "./src/index-registry.js";
 import { readProjectPath } from "./src/project-path.js";
 import { parseContextArgs } from "./src/cli.js";
 import {
+  collectRemoteSources,
+  formatRemoteInventory,
+  type RemoteInventory,
+} from "./src/remote-inventory.js";
+import {
   mergeCodeGraphConfig,
   normalizeCodeGraphConfig,
   type CodeGraphConfig,
@@ -108,6 +113,18 @@ const indexViewSchema = z.object({
   symbols: z.number().int(),
   indexedAtMs: z.number().int().nullable(),
   staleness: z.string().nullable(),
+  remoteInventory: z.object({
+    enumerated: z.number().int(),
+    indexed: z.number().int(),
+    truncated: z.boolean(),
+    skipped: z.object({
+      ignored: z.number().int(),
+      excluded: z.number().int(),
+      tooLarge: z.number().int(),
+      nonUtf8: z.number().int(),
+      unreadable: z.number().int(),
+    }),
+  }).nullable(),
 });
 
 export const rpcContract = defineRpcContract({
@@ -193,6 +210,8 @@ export default async function plugin(bb: BbPluginApi) {
   const remoteSources = new Map<string, ReadonlyMap<string, string>>();
   /** Sorted and line-split alongside each remote snapshot for the search hot path. */
   const preparedRemoteSources = new Map<string, readonly PreparedInstantGrepSource[]>();
+  /** Last host-file inventory report for each remote workspace. */
+  const remoteInventories = new Map<string, RemoteInventory>();
 
   /** Every retrieval answer awaiting a per-surface outcome, keyed by thread. */
   const pending = new Map<string, PendingAnswer[]>();
@@ -200,6 +219,7 @@ export default async function plugin(bb: BbPluginApi) {
   interface RepositoryState {
     readonly sources: ReadonlyMap<string, string>;
     readonly fileHashes: ReadonlyMap<string, string>;
+    readonly remoteInventory?: RemoteInventory;
   }
 
   const throwIfAborted = (signal?: AbortSignal) => {
@@ -223,7 +243,6 @@ export default async function plugin(bb: BbPluginApi) {
       limit: "10000",
       signal,
     });
-    if (listed.truncated) throw new Error(`remote workspace has more than 10000 paths: ${workspace.path}`);
     let ignored: Ignore | null = null;
     if (config.respectGitignore) {
       try {
@@ -238,37 +257,33 @@ export default async function plugin(bb: BbPluginApi) {
         // A missing or unreadable .gitignore leaves the permanent exclusions below.
       }
     }
-    const files = listed.paths
+    const paths = listed.paths
       .map((entry) => entry.path.replace(/^\.\//, ""))
-      .filter((file) => ignored === null || !ignored.ignores(file))
-      .filter((file) => !file.split("/").some((part) =>
+    const collection = await collectRemoteSources({
+      paths,
+      truncated: listed.truncated,
+      isIgnored: (file) => ignored !== null && ignored.ignores(file),
+      isExcluded: (file) => file.split("/").some((part) =>
         part.startsWith(".") ||
         ["node_modules", "dist", "build", "out", "target", "vendor", "venv", "__pycache__", "coverage"].includes(part),
-      ))
-      .sort((left, right) => left.localeCompare(right));
-    const sources = new Map<string, string>();
-    const fileHashes = new Map<string, string>();
-    let cursor = 0;
-    const readNext = async () => {
-      while (true) {
+      ),
+      read: async (file) => {
         throwIfAborted(signal);
-        const file = files[cursor++];
-        if (file === undefined) return;
-        const content = await bb.sdk.projects.fileContent({
+        return bb.sdk.projects.fileContent({
           projectId: workspace.projectId,
           environmentId: workspace.environmentId,
           path: file,
           signal,
         });
-        if (content.contentEncoding !== "utf8" || content.sizeBytes > 512 * 1024) continue;
-        sources.set(file, content.content);
-        fileHashes.set(file, hashContent(content.content));
-      }
-    };
-    await Promise.all(Array.from({ length: Math.min(16, files.length) }, readNext));
-    remoteSources.set(root, sources);
-    preparedRemoteSources.set(root, prepareInstantGrepSources(sources));
-    return { sources, fileHashes };
+      },
+    });
+    const fileHashes = new Map(
+      [...collection.sources].map(([file, source]) => [file, hashContent(source)]),
+    );
+    remoteSources.set(root, collection.sources);
+    preparedRemoteSources.set(root, prepareInstantGrepSources(collection.sources));
+    remoteInventories.set(root, collection.inventory);
+    return { sources: collection.sources, fileHashes, remoteInventory: collection.inventory };
   }
 
   async function readRepositoryState(
@@ -1558,6 +1573,7 @@ export default async function plugin(bb: BbPluginApi) {
       symbols: entry?.index.symbols.length ?? snapshot?.symbols.length ?? 0,
       indexedAtMs: entry?.indexedAtMs ?? snapshot?.builtAtMs ?? null,
       staleness: root === null ? null : (staleness.get(root) ?? null),
+      remoteInventory: root === null ? null : (remoteInventories.get(root) ?? null),
     };
   }
 
@@ -1710,10 +1726,15 @@ export default async function plugin(bb: BbPluginApi) {
           .get() as { r: number | null };
         const all = indexes.list();
         const rows = all.map(
-          (entry) =>
-            `${entry.root}\n` +
-            `  symbols: ${entry.index.symbols.length}, edges: ${entry.edgeCount}, ` +
-            `completeness: >= ${(entry.index.graphCompleteness * 100).toFixed(1)}%`,
+          (entry) => {
+            const inventory = remoteInventories.get(entry.root);
+            return [
+              entry.root,
+              `  symbols: ${entry.index.symbols.length}, edges: ${entry.edgeCount}, ` +
+                `completeness: >= ${(entry.index.graphCompleteness * 100).toFixed(1)}%`,
+              ...(inventory === undefined ? [] : [`  ${formatRemoteInventory(inventory)}`]),
+            ].join("\n");
+          },
         );
         return {
           exitCode: 0,
@@ -1890,6 +1911,7 @@ export default async function plugin(bb: BbPluginApi) {
   bb.onDispose(() => {
     pending.clear();
     indexingRoots.clear();
+    remoteInventories.clear();
     indexes.clear();
   });
 }

@@ -17729,6 +17729,58 @@ function parseContextArgs(argv) {
   };
 }
 
+// src/remote-inventory.ts
+var REMOTE_MAX_FILE_BYTES = 512 * 1024;
+function formatRemoteInventory(inventory) {
+  const { skipped } = inventory;
+  return `remote inventory: indexed ${inventory.indexed}/${inventory.enumerated} enumerated; skipped ignored=${skipped.ignored}, excluded=${skipped.excluded}, tooLarge=${skipped.tooLarge}, nonUtf8=${skipped.nonUtf8}, unreadable=${skipped.unreadable}` + (inventory.truncated ? "; host listing truncated, remaining paths unknown" : "");
+}
+async function collectRemoteSources(options) {
+  const paths = [...options.paths].sort((left, right) => left.localeCompare(right));
+  const skipped = { ignored: 0, excluded: 0, tooLarge: 0, nonUtf8: 0, unreadable: 0 };
+  const sources = /* @__PURE__ */ new Map();
+  const concurrency = Math.max(1, Math.min(options.concurrency ?? 16, paths.length));
+  let cursor = 0;
+  const readNext = async () => {
+    while (true) {
+      const path = paths[cursor++];
+      if (path === void 0) return;
+      if (options.isIgnored(path)) {
+        skipped.ignored++;
+        continue;
+      }
+      if (options.isExcluded(path)) {
+        skipped.excluded++;
+        continue;
+      }
+      try {
+        const file2 = await options.read(path);
+        if (file2.contentEncoding !== "utf8") {
+          skipped.nonUtf8++;
+          continue;
+        }
+        if (file2.sizeBytes > REMOTE_MAX_FILE_BYTES) {
+          skipped.tooLarge++;
+          continue;
+        }
+        sources.set(path, file2.content);
+      } catch {
+        skipped.unreadable++;
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: concurrency }, readNext));
+  return {
+    sources,
+    inventory: {
+      enumerated: paths.length,
+      indexed: sources.size,
+      truncated: options.truncated,
+      skipped
+    }
+  };
+}
+
 // src/config.ts
 var INSTRUCTION_STYLES = ["playbook", "budget", "short", "off"];
 var DEFAULT_CODE_GRAPH_CONFIG = Object.freeze({
@@ -18088,7 +18140,19 @@ var indexViewSchema = external_exports.object({
   files: external_exports.number().int(),
   symbols: external_exports.number().int(),
   indexedAtMs: external_exports.number().int().nullable(),
-  staleness: external_exports.string().nullable()
+  staleness: external_exports.string().nullable(),
+  remoteInventory: external_exports.object({
+    enumerated: external_exports.number().int(),
+    indexed: external_exports.number().int(),
+    truncated: external_exports.boolean(),
+    skipped: external_exports.object({
+      ignored: external_exports.number().int(),
+      excluded: external_exports.number().int(),
+      tooLarge: external_exports.number().int(),
+      nonUtf8: external_exports.number().int(),
+      unreadable: external_exports.number().int()
+    })
+  }).nullable()
 });
 var rpcContract = defineRpcContract({
   status: {
@@ -18154,6 +18218,7 @@ async function plugin(bb) {
   const remoteWorkspaces = /* @__PURE__ */ new Map();
   const remoteSources = /* @__PURE__ */ new Map();
   const preparedRemoteSources = /* @__PURE__ */ new Map();
+  const remoteInventories = /* @__PURE__ */ new Map();
   const pending = /* @__PURE__ */ new Map();
   const throwIfAborted = (signal) => {
     if (signal?.aborted) throw new Error("indexing aborted");
@@ -18171,7 +18236,6 @@ async function plugin(bb) {
       limit: "10000",
       signal
     });
-    if (listed.truncated) throw new Error(`remote workspace has more than 10000 paths: ${workspace.path}`);
     let ignored = null;
     if (config2.respectGitignore) {
       try {
@@ -18185,32 +18249,31 @@ async function plugin(bb) {
       } catch {
       }
     }
-    const files = listed.paths.map((entry) => entry.path.replace(/^\.\//, "")).filter((file2) => ignored === null || !ignored.ignores(file2)).filter((file2) => !file2.split("/").some(
-      (part) => part.startsWith(".") || ["node_modules", "dist", "build", "out", "target", "vendor", "venv", "__pycache__", "coverage"].includes(part)
-    )).sort((left, right) => left.localeCompare(right));
-    const sources = /* @__PURE__ */ new Map();
-    const fileHashes = /* @__PURE__ */ new Map();
-    let cursor = 0;
-    const readNext = async () => {
-      while (true) {
+    const paths = listed.paths.map((entry) => entry.path.replace(/^\.\//, ""));
+    const collection = await collectRemoteSources({
+      paths,
+      truncated: listed.truncated,
+      isIgnored: (file2) => ignored !== null && ignored.ignores(file2),
+      isExcluded: (file2) => file2.split("/").some(
+        (part) => part.startsWith(".") || ["node_modules", "dist", "build", "out", "target", "vendor", "venv", "__pycache__", "coverage"].includes(part)
+      ),
+      read: async (file2) => {
         throwIfAborted(signal);
-        const file2 = files[cursor++];
-        if (file2 === void 0) return;
-        const content = await bb.sdk.projects.fileContent({
+        return bb.sdk.projects.fileContent({
           projectId: workspace.projectId,
           environmentId: workspace.environmentId,
           path: file2,
           signal
         });
-        if (content.contentEncoding !== "utf8" || content.sizeBytes > 512 * 1024) continue;
-        sources.set(file2, content.content);
-        fileHashes.set(file2, hashContent(content.content));
       }
-    };
-    await Promise.all(Array.from({ length: Math.min(16, files.length) }, readNext));
-    remoteSources.set(root, sources);
-    preparedRemoteSources.set(root, prepareInstantGrepSources(sources));
-    return { sources, fileHashes };
+    });
+    const fileHashes = new Map(
+      [...collection.sources].map(([file2, source]) => [file2, hashContent(source)])
+    );
+    remoteSources.set(root, collection.sources);
+    preparedRemoteSources.set(root, prepareInstantGrepSources(collection.sources));
+    remoteInventories.set(root, collection.inventory);
+    return { sources: collection.sources, fileHashes, remoteInventory: collection.inventory };
   }
   async function readRepositoryState(root, signal) {
     if (isRemoteRoot(root)) return readRemoteRepositoryState(root, signal);
@@ -19166,7 +19229,8 @@ async function plugin(bb) {
       files: snapshot?.fileHashes.size ?? 0,
       symbols: entry?.index.symbols.length ?? snapshot?.symbols.length ?? 0,
       indexedAtMs: entry?.indexedAtMs ?? snapshot?.builtAtMs ?? null,
-      staleness: root === null ? null : staleness.get(root) ?? null
+      staleness: root === null ? null : staleness.get(root) ?? null,
+      remoteInventory: root === null ? null : remoteInventories.get(root) ?? null
     };
   }
   function refreshIndexesAfterConfigChange(previous, next) {
@@ -19294,8 +19358,12 @@ async function plugin(bb) {
         const rate = db.prepare(`SELECT AVG(recall) AS r FROM outcomes WHERE recall IS NOT NULL`).get();
         const all = indexes.list();
         const rows = all.map(
-          (entry) => `${entry.root}
-  symbols: ${entry.index.symbols.length}, edges: ${entry.edgeCount}, completeness: >= ${(entry.index.graphCompleteness * 100).toFixed(1)}%`
+          (entry) => {
+            const inventory = remoteInventories.get(entry.root);
+            return `${entry.root}
+  symbols: ${entry.index.symbols.length}, edges: ${entry.edgeCount}, completeness: >= ${(entry.index.graphCompleteness * 100).toFixed(1)}%` + (inventory === void 0 ? "" : `
+  ${formatRemoteInventory(inventory)}`);
+          }
         );
         return {
           exitCode: 0,
@@ -19447,6 +19515,7 @@ ${lines.join("\n")}
   bb.onDispose(() => {
     pending.clear();
     indexingRoots.clear();
+    remoteInventories.clear();
     indexes.clear();
   });
 }
