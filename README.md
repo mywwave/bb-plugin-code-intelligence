@@ -108,3 +108,20 @@ frontend bundle, panel, or settings UI.
 Read [CONTRIBUTING.md](CONTRIBUTING.md) for the full local development and
 pull-request workflow. The repository uses a manual local release gate rather
 than GitHub Actions.
+
+## Releases
+
+Prepare a reviewed release locally, commit and push it, then publish its
+annotated tag and GitHub Release:
+
+```bash
+npm run release:prepare -- 1.2.3
+git add package.json package-lock.json CHANGELOG.md dist
+git commit -m "release: prepare v1.2.3"
+git push origin main
+npm run check
+npm run release:publish -- 1.2.3
+```
+
+`release:publish` refuses a dirty tree, an unpushed commit, a mismatched
+package version, or an existing tag. It does not require GitHub Actions.

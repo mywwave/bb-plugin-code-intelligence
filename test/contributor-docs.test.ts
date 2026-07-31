@@ -14,6 +14,8 @@ describe("contributor contract", () => {
     const packageJson = JSON.parse(await readRepositoryFile("package.json"));
     expect(packageJson.scripts.check).toBe("npm run verify:release");
     expect(packageJson.scripts["install-git-hooks"]).toBe("node scripts/install-git-hooks.js");
+    expect(packageJson.scripts["release:prepare"]).toBe("node scripts/prepare-release.js");
+    expect(packageJson.scripts["release:publish"]).toBe("node scripts/publish-release.js");
 
     const requiredFiles = [
       "CONTRIBUTING.md",
@@ -39,7 +41,7 @@ describe("contributor contract", () => {
     await expect(readRepositoryFile("CONTRIBUTING.md")).resolves.toContain("npm ci && npm run check");
     await expect(readRepositoryFile("README.md")).resolves.toContain("npm run check");
     await expect(readRepositoryFile("docs/RELEASE_CHECKLIST.md")).resolves.toContain(
-      "npm run check",
+      "npm run release:publish",
     );
     await expect(readRepositoryFile("SECURITY.md")).resolves.toContain(
       "Private Vulnerability Reporting",

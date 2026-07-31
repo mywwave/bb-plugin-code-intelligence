@@ -8,7 +8,13 @@ All notable user-visible changes are recorded here. The format follows
 
 ### Added
 
-- Local contributor verification and governance documentation.
+- Code Intelligence native tools for exact code search, bounded exploration,
+  symbol lookup, static context, repository orientation, and pre/post-change
+  impact checks.
+- Managed Git installation artifact with bundled Tree-sitter parser runtime.
+- Local contributor verification, governance, issue/PR templates, and
+  security reporting guidance.
+- Local-first release preparation and guarded GitHub Release publication.
 
 ## Versioning
 

@@ -65,3 +65,12 @@ and merge pull requests; passing a local gate does not replace review.
 - Read [GOVERNANCE.md](GOVERNANCE.md) for maintainer decisions and merge rules.
 - Read [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md) for the manual
   release path.
+
+## Releases
+
+Only a maintainer publishes releases. Run `npm run release:prepare -- <version>`
+from a clean tree, review and commit the version, changelog, and generated
+`dist/` changes, then push `main`. After `npm run check` passes against that
+pushed commit, run `npm run release:publish -- <version>`. The publisher
+creates an annotated `v<version>` tag and a GitHub Release; it refuses to
+publish an unpushed, dirty, mismatched, or already tagged release.
